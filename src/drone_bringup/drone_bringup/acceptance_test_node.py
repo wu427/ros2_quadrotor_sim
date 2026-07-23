@@ -90,6 +90,8 @@ class AcceptanceTestNode(Node):
         self.finished = False
         self.exit_code = 2
         self.log_counter = 0
+        self.goal_sent = False
+        self.shutdown_timer = None
 
         self.get_logger().info(
             "Acceptance test target: "
@@ -106,9 +108,26 @@ class AcceptanceTestNode(Node):
         if self.finished:
             return
 
-        self.publish_goal()
-
         elapsed = time.monotonic() - self.start_time
+
+        if not self.goal_sent:
+            if (
+                self.goal_publisher.get_subscription_count()
+                > 0
+            ):
+                self.publish_goal()
+                self.goal_sent = True
+
+                self.get_logger().info(
+                    "Goal published to controller"
+                )
+            elif elapsed >= self.timeout_sec:
+                self.finish_failure(
+                    "No controller subscription "
+                    "before timeout"
+                )
+
+            return
 
         if self.latest_odom is None:
             if elapsed >= self.timeout_sec:
@@ -299,7 +318,7 @@ class AcceptanceTestNode(Node):
         self.finished = True
         self.exit_code = exit_code
 
-        self.create_timer(
+        self.shutdown_timer = self.create_timer(
             0.1,
             self.request_shutdown,
         )
