@@ -1,0 +1,125 @@
+<?xml version="1.0"?>
+<robot name="quadrotor">
+  <!-- Coordinate convention: x forward, y left, z up. -->
+  <link name="base_link">
+    <inertial>
+      <origin xyz="0 0 0"/>
+      <mass value="1.0"/>
+      <inertia
+        ixx="0.005"
+        ixy="0.0"
+        ixz="0.0"
+        iyy="0.005"
+        iyz="0.0"
+        izz="0.009"/>
+    </inertial>
+
+    <!-- Central body -->
+    <visual>
+      <origin xyz="0 0 0"/>
+      <geometry>
+        <box size="0.25 0.15 0.08"/>
+      </geometry>
+      <material name="body_dark">
+        <color rgba="0.12 0.15 0.18 1.0"/>
+      </material>
+    </visual>
+
+    <!-- Forward direction indicator -->
+    <visual>
+      <origin xyz="0.155 0 0.015"/>
+      <geometry>
+        <box size="0.08 0.06 0.035"/>
+      </geometry>
+      <material name="front_red">
+        <color rgba="0.92 0.12 0.10 1.0"/>
+      </material>
+    </visual>
+
+    <!-- X-frame arms -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0.785398"/>
+      <geometry>
+        <box size="0.48 0.025 0.025"/>
+      </geometry>
+      <material name="arm_gray">
+        <color rgba="0.35 0.38 0.42 1.0"/>
+      </material>
+    </visual>
+
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -0.785398"/>
+      <geometry>
+        <box size="0.48 0.025 0.025"/>
+      </geometry>
+      <material name="arm_gray_2">
+        <color rgba="0.35 0.38 0.42 1.0"/>
+      </material>
+    </visual>
+
+    <!-- M1 front-left -->
+    <visual>
+      <origin xyz="0.1556 0.1556 0.03"/>
+      <geometry>
+        <cylinder radius="0.095" length="0.012"/>
+      </geometry>
+      <material name="m1_red">
+        <color rgba="0.95 0.20 0.15 0.85"/>
+      </material>
+    </visual>
+
+    <!-- M2 front-right -->
+    <visual>
+      <origin xyz="0.1556 -0.1556 0.03"/>
+      <geometry>
+        <cylinder radius="0.095" length="0.012"/>
+      </geometry>
+      <material name="m2_red">
+        <color rgba="0.95 0.20 0.15 0.85"/>
+      </material>
+    </visual>
+
+    <!-- M3 rear-right -->
+    <visual>
+      <origin xyz="-0.1556 -0.1556 0.03"/>
+      <geometry>
+        <cylinder radius="0.095" length="0.012"/>
+      </geometry>
+      <material name="m3_blue">
+        <color rgba="0.15 0.45 0.95 0.85"/>
+      </material>
+    </visual>
+
+    <!-- M4 rear-left -->
+    <visual>
+      <origin xyz="-0.1556 0.1556 0.03"/>
+      <geometry>
+        <cylinder radius="0.095" length="0.012"/>
+      </geometry>
+      <material name="m4_blue">
+        <color rgba="0.15 0.45 0.95 0.85"/>
+      </material>
+    </visual>
+
+    <!-- Landing skids -->
+    <visual>
+      <origin xyz="0 0.09 -0.075"/>
+      <geometry>
+        <box size="0.30 0.018 0.018"/>
+      </geometry>
+      <material name="skid">
+        <color rgba="0.18 0.18 0.18 1.0"/>
+      </material>
+    </visual>
+
+    <visual>
+      <origin xyz="0 -0.09 -0.075"/>
+      <geometry>
+        <box size="0.30 0.018 0.018"/>
+      </geometry>
+      <material name="skid_2">
+        <color rgba="0.18 0.18 0.18 1.0"/>
+      </material>
+    </visual>
+  </link>
+</robot>
