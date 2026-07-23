@@ -1,0 +1,18 @@
+quadrotor_dynamics_node:
+  ros__parameters:
+    mass: 1.0
+    gravity: 9.81
+    thrust_coefficient: 8.54858e-6
+    motor_time_constant: 0.05
+    vertical_drag: 0.15
+    max_rpm: 10000.0
+
+position_controller_node:
+  ros__parameters:
+    mass: 1.0
+    gravity: 9.81
+    thrust_coefficient: 8.54858e-6
+    kp_z: 3.0
+    kd_z: 2.5
+    max_acceleration_z: 3.0
+    max_rpm: 10000.0
