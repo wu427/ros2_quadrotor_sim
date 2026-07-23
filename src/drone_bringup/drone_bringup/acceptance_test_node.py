@@ -1,4 +1,6 @@
 import math
+import os
+import threading
 import time
 from typing import Optional
 
@@ -91,7 +93,6 @@ class AcceptanceTestNode(Node):
         self.exit_code = 2
         self.log_counter = 0
         self.goal_sent = False
-        self.shutdown_timer = None
 
         self.get_logger().info(
             "Acceptance test target: "
@@ -315,18 +316,24 @@ class AcceptanceTestNode(Node):
         self.finish(1)
 
     def finish(self, exit_code: int) -> None:
+        if self.finished:
+            return
+
         self.finished = True
         self.exit_code = exit_code
 
-        self.shutdown_timer = self.create_timer(
-            0.1,
-            self.request_shutdown,
+        shutdown_thread = threading.Thread(
+            target=self.force_process_exit,
+            args=(exit_code,),
+            daemon=True,
         )
+        shutdown_thread.start()
 
     @staticmethod
-    def request_shutdown() -> None:
-        if rclpy.ok():
-            rclpy.shutdown()
+    def force_process_exit(exit_code: int) -> None:
+        # Allow the PASS/FAIL log to be flushed first.
+        time.sleep(0.2)
+        os._exit(exit_code)
 
     @staticmethod
     def yaw_from_quaternion(
