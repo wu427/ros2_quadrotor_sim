@@ -1,9 +1,6 @@
 from geometry_msgs.msg import PoseStamped
 from rclpy.node import Node
 import rclpy
-from rclpy.qos import DurabilityPolicy
-from rclpy.qos import QoSProfile
-from rclpy.qos import ReliabilityPolicy
 from visualization_msgs.msg import Marker
 
 
@@ -13,14 +10,10 @@ class GoalMarkerNode(Node):
     def __init__(self) -> None:
         super().__init__("goal_marker_node")
 
-        qos = QoSProfile(depth=1)
-        qos.reliability = ReliabilityPolicy.RELIABLE
-        qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
-
         self._publisher = self.create_publisher(
             Marker,
             "/drone/goal_marker",
-            qos,
+            10,
         )
 
         self._subscription = self.create_subscription(
@@ -30,6 +23,13 @@ class GoalMarkerNode(Node):
             10,
         )
 
+        self._latest_marker = None
+
+        self._timer = self.create_timer(
+            0.2,
+            self._publish_latest_marker,
+        )
+
         self.get_logger().info(
             "Goal marker node started"
         )
@@ -37,20 +37,22 @@ class GoalMarkerNode(Node):
     def _goal_callback(self, message: PoseStamped) -> None:
         marker = Marker()
 
-        marker.header = message.header
-        if not marker.header.frame_id:
-            marker.header.frame_id = "map"
-        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.header.frame_id = (
+            message.header.frame_id
+            if message.header.frame_id
+            else "map"
+        )
+
+        # A zero timestamp asks RViz to use the latest transform.
+        marker.header.stamp.sec = 0
+        marker.header.stamp.nanosec = 0
 
         marker.ns = "drone_goal"
         marker.id = 0
         marker.type = Marker.SPHERE
         marker.action = Marker.ADD
 
-        marker.pose = message.pose
-        marker.pose.orientation.x = 0.0
-        marker.pose.orientation.y = 0.0
-        marker.pose.orientation.z = 0.0
+        marker.pose.position = message.pose.position
         marker.pose.orientation.w = 1.0
 
         marker.scale.x = 0.22
@@ -65,7 +67,14 @@ class GoalMarkerNode(Node):
         marker.lifetime.sec = 0
         marker.lifetime.nanosec = 0
 
+        self._latest_marker = marker
         self._publisher.publish(marker)
+
+    def _publish_latest_marker(self) -> None:
+        if self._latest_marker is not None:
+            self._publisher.publish(
+                self._latest_marker
+            )
 
 
 def main(args=None) -> None:
@@ -78,7 +87,9 @@ def main(args=None) -> None:
         pass
     finally:
         node.destroy_node()
-        rclpy.shutdown()
+
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -82,7 +82,7 @@ Visualization Manager:
       Enabled: true
       Marker Topic:
         Depth: 5
-        Durability Policy: Transient Local
+        Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /drone/goal_marker
