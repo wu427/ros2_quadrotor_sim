@@ -1,11 +1,25 @@
 quadrotor_dynamics_node:
   ros__parameters:
+    update_rate_hz: 200.0
     mass: 1.0
     gravity: 9.81
+    arm_length: 0.22
     thrust_coefficient: 8.54858e-6
+    moment_coefficient: 1.37e-7
     motor_time_constant: 0.05
-    vertical_drag: 0.15
     max_rpm: 10000.0
+
+    inertia_xx: 0.005
+    inertia_yy: 0.005
+    inertia_zz: 0.009
+
+    linear_drag_x: 0.10
+    linear_drag_y: 0.10
+    linear_drag_z: 0.15
+
+    angular_drag_x: 0.002
+    angular_drag_y: 0.002
+    angular_drag_z: 0.003
 
 position_controller_node:
   ros__parameters:
