@@ -8,15 +8,12 @@ quadrotor_dynamics_node:
     moment_coefficient: 1.37e-7
     motor_time_constant: 0.05
     max_rpm: 10000.0
-
     inertia_xx: 0.005
     inertia_yy: 0.005
     inertia_zz: 0.009
-
     linear_drag_x: 0.10
     linear_drag_y: 0.10
     linear_drag_z: 0.15
-
     angular_drag_x: 0.002
     angular_drag_y: 0.002
     angular_drag_z: 0.003
@@ -25,8 +22,26 @@ position_controller_node:
   ros__parameters:
     mass: 1.0
     gravity: 9.81
+    arm_length: 0.22
     thrust_coefficient: 8.54858e-6
-    kp_z: 3.0
-    kd_z: 2.5
-    max_acceleration_z: 3.0
+    moment_coefficient: 1.37e-7
     max_rpm: 10000.0
+    inertia_xx: 0.005
+    inertia_yy: 0.005
+    inertia_zz: 0.009
+    position_kp_x: 1.8
+    position_kp_y: 1.8
+    position_kp_z: 3.0
+    position_kd_x: 2.2
+    position_kd_y: 2.2
+    position_kd_z: 2.5
+    attitude_kp_roll: 0.08
+    attitude_kp_pitch: 0.08
+    attitude_kp_yaw: 0.05
+    angular_rate_kd_roll: 0.018
+    angular_rate_kd_pitch: 0.018
+    angular_rate_kd_yaw: 0.012
+    max_horizontal_acceleration: 3.0
+    max_vertical_acceleration: 3.0
+    max_tilt_angle_deg: 25.0
+    goal_distance_limit: 10.0
