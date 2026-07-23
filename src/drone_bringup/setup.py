@@ -10,7 +10,7 @@ package_name = "drone_bringup"
 
 setup(
     name=package_name,
-    version="0.2.0",
+    version="0.3.0",
     packages=find_packages(exclude=["test"]),
     data_files=[
         (
@@ -59,8 +59,8 @@ setup(
     maintainer="wu427",
     maintainer_email="1973669388@qq.com",
     description=(
-        "Launch, configuration, and RViz visualization "
-        "for the ROS2 quadrotor simulator"
+        "Launch, visualization, and automated acceptance "
+        "tests for the ROS2 quadrotor simulator"
     ),
     license="Apache-2.0",
     tests_require=["pytest"],
@@ -69,6 +69,10 @@ setup(
             (
                 "goal_marker_node = "
                 "drone_bringup.goal_marker_node:main"
+            ),
+            (
+                "acceptance_test_node = "
+                "drone_bringup.acceptance_test_node:main"
             ),
         ],
     },
