@@ -1,4 +1,5 @@
 from geometry_msgs.msg import PoseStamped
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 import rclpy
 from visualization_msgs.msg import Marker
@@ -83,8 +84,11 @@ def main(args=None) -> None:
 
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, ExternalShutdownException):
         pass
+    except Exception:
+        if rclpy.ok():
+            raise
     finally:
         node.destroy_node()
 

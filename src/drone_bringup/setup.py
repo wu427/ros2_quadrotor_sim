@@ -74,6 +74,10 @@ setup(
                 "acceptance_test_node = "
                 "drone_bringup.acceptance_test_node:main"
             ),
+            (
+                "planning_acceptance_node = "
+                "drone_bringup.planning_acceptance_node:main"
+            ),
         ],
     },
 )
