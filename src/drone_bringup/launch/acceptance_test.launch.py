@@ -79,6 +79,18 @@ def generate_launch_description():
             "yaw_tolerance_deg": float_parameter(
                 "yaw_tolerance_deg"
             ),
+            "linear_speed_tolerance": float_parameter(
+                "linear_speed_tolerance"
+            ),
+            "angular_speed_tolerance": float_parameter(
+                "angular_speed_tolerance"
+            ),
+            "stable_duration_sec": float_parameter(
+                "stable_duration_sec"
+            ),
+            "discovery_timeout_sec": float_parameter(
+                "discovery_timeout_sec"
+            ),
             "timeout_sec": float_parameter(
                 "timeout_sec"
             ),
@@ -104,30 +116,73 @@ def generate_launch_description():
         DeclareLaunchArgument(
             "target_x",
             default_value="2.0",
+            description="Target x position in metres.",
         ),
         DeclareLaunchArgument(
             "target_y",
             default_value="1.0",
+            description="Target y position in metres.",
         ),
         DeclareLaunchArgument(
             "target_z",
             default_value="1.5",
+            description="Target z position in metres.",
         ),
         DeclareLaunchArgument(
             "target_yaw_deg",
             default_value="90.0",
+            description="Target yaw angle in degrees.",
         ),
         DeclareLaunchArgument(
             "position_tolerance",
             default_value="0.05",
+            description=(
+                "Maximum three-dimensional position "
+                "error in metres."
+            ),
         ),
         DeclareLaunchArgument(
             "yaw_tolerance_deg",
             default_value="3.0",
+            description="Maximum yaw error in degrees.",
+        ),
+        DeclareLaunchArgument(
+            "linear_speed_tolerance",
+            default_value="0.05",
+            description=(
+                "Maximum linear speed in metres per second."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "angular_speed_tolerance",
+            default_value="0.05",
+            description=(
+                "Maximum angular speed in radians per second."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "stable_duration_sec",
+            default_value="1.0",
+            description=(
+                "Duration for which all acceptance thresholds "
+                "must remain satisfied, in seconds."
+            ),
+        ),
+        DeclareLaunchArgument(
+            "discovery_timeout_sec",
+            default_value="15.0",
+            description=(
+                "Maximum time to wait for the controller "
+                "subscription and valid odometry, in seconds."
+            ),
         ),
         DeclareLaunchArgument(
             "timeout_sec",
-            default_value="15.0",
+            default_value="20.0",
+            description=(
+                "Maximum convergence time after goal "
+                "publication, in seconds."
+            ),
         ),
         dynamics_node,
         controller_node,
