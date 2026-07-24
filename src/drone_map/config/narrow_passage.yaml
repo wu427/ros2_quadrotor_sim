@@ -1,0 +1,47 @@
+map:
+  frame_id: map
+  x_min: -1.0
+  x_max: 6.0
+  y_min: -4.0
+  y_max: 4.0
+  z_min: 0.0
+  z_max: 3.5
+  drone_radius: 0.25
+  safety_margin: 0.35
+  grid_resolution: 0.20
+  obstacles:
+    - id: passage_north
+      center_x: 2.5
+      center_y: 2.275
+      center_z: 1.35
+      size_x: 2.2
+      size_y: 2.05
+      size_z: 2.70
+    - id: passage_south
+      center_x: 2.5
+      center_y: -2.275
+      center_z: 1.35
+      size_x: 2.2
+      size_y: 2.05
+      size_z: 2.70
+    - id: entrance_block
+      center_x: 1.1
+      center_y: 0.8
+      center_z: 0.95
+      size_x: 0.60
+      size_y: 0.60
+      size_z: 1.90
+    - id: exit_north
+      center_x: 4.40
+      center_y: 1.60
+      center_z: 1.20
+      size_x: 0.70
+      size_y: 1.00
+      size_z: 2.40
+    - id: exit_south
+      center_x: 4.40
+      center_y: -1.60
+      center_z: 1.20
+      size_x: 0.70
+      size_y: 1.00
+      size_z: 2.40

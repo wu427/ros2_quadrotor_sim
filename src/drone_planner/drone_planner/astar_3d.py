@@ -44,6 +44,7 @@ class AStar3D:
         static_map: StaticMap,
         max_expanded_nodes: int = 100000,
         planning_timeout_sec: float = 2.0,
+        minimum_z: float | None = None,
     ) -> None:
         if max_expanded_nodes <= 0:
             raise ValueError("max_expanded_nodes must be positive")
@@ -56,6 +57,17 @@ class AStar3D:
         self.resolution = static_map.grid_resolution
         self.max_expanded_nodes = max_expanded_nodes
         self.planning_timeout_sec = planning_timeout_sec
+        self.minimum_z = (
+            static_map.minimum[2]
+            if minimum_z is None
+            else float(minimum_z)
+        )
+        if (
+            not math.isfinite(self.minimum_z)
+            or self.minimum_z < static_map.minimum[2]
+            or self.minimum_z > static_map.maximum[2]
+        ):
+            raise ValueError("minimum_z must lie inside map bounds")
         self.shape = tuple(
             int(math.ceil((upper - lower) / self.resolution))
             for lower, upper in zip(static_map.minimum, static_map.maximum)
@@ -184,6 +196,8 @@ class AStar3D:
                 if neighbour in closed:
                     continue
                 neighbour_world = self.grid_to_world(neighbour)
+                if neighbour_world[2] < self.minimum_z:
+                    continue
                 if not self.static_map.is_traversable(neighbour_world):
                     continue
                 if not self.static_map.segment_is_collision_free(
@@ -218,6 +232,8 @@ class AStar3D:
             return f"{role}_NON_FINITE"
         if not self.static_map.contains_point(checked):
             return f"{role}_OUT_OF_BOUNDS"
+        if checked[2] < self.minimum_z:
+            return f"{role}_BELOW_MINIMUM_Z"
         if self.static_map.is_occupied(checked):
             return f"{role}_OCCUPIED"
         return checked  # type: ignore[return-value]

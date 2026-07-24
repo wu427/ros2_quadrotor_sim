@@ -78,6 +78,10 @@ setup(
                 "planning_acceptance_node = "
                 "drone_bringup.planning_acceptance_node:main"
             ),
+            (
+                "showcase_acceptance_node = "
+                "drone_bringup.showcase_acceptance_node:main"
+            ),
         ],
     },
 )

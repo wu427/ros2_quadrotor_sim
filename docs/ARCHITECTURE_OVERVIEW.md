@@ -28,10 +28,11 @@
 | URDF、RViz、目标 Marker | 已有实现 | `drone_bringup` |
 | 单目标自动验收 | 已有实现 | `run_acceptance.sh` 当前复测 PASS |
 | 自定义消息 | 未实现 | `drone_msgs` 为空包 |
-| 静态地图 | 已有实现 | YAML AABB、膨胀几何和 transient-local MarkerArray |
-| 路径规划/避障 | 已有实现 | 26 邻域 3D A*、LOS 简化和航点执行 |
-| 规划系统验收 | 已有实现 | 单/多障碍正向与非法目标/无路负向场景 |
-| 地面站 | 未实现 | 当前采用 RViz |
+| 静态地图 | 已有实现 | 6 障碍默认场景、AABB 膨胀、双层 Marker 与可选点云 |
+| 路径规划/避障 | 已有实现 | 3D A*、LOS、安全平滑、重采样和前视执行 |
+| 任务管理 | 已有实现 | 单目标、多航点、暂停/继续/取消和预定义轨迹 |
+| 规划系统验收 | 已有实现 | 复杂/窄通道/随机/多段正向与负向场景 |
+| 地面站 | 已有实现 | PyQt5、后台 rclpy、二维图、曲线和导出 |
 
 ## 3. 包级架构
 
@@ -43,14 +44,17 @@ flowchart LR
     M["drone_msgs<br/>空骨架"]
     MAP["drone_map<br/>YAML / AABB / 碰撞几何 / Marker"]
     P["drone_planner<br/>3D A* / LOS 简化 / 航点执行"]
+    GS["drone_ground_station<br/>Qt / ROS bridge / plots / export"]
 
     B --> C
     B --> D
     B --> MAP
     B --> P
+    B --> GS
     M -. "当前未被引用" .-> C
     MAP --> P
     P --> C
+    GS --> P
 ```
 
 ### 3.1 `drone_dynamics`
@@ -104,6 +108,8 @@ flowchart LR
 - 验证有限值、正尺寸、边界关系、唯一 ID 和障碍物范围；
 - 提供与 ROS 解耦的点/线段/折线路径碰撞、膨胀和连续净空计算；
 - 以 Reliable、Transient Local QoS 发布 `/map/obstacles`。
+- 发布可独立开关的 `/map/inflated_obstacles`；
+- 可选按固定 spacing 发布 `/map/obstacle_points`，点云只用于显示。
 
 ### 3.5 `drone_planner`
 
@@ -112,10 +118,25 @@ flowchart LR
 - 在膨胀 AABB 上执行有扩展数与时间上限的 26 邻域 3D A*；
 - 使用连续线段碰撞检查防止对角穿角；
 - 用最远可视后继策略简化栅格路径，并再次验证每段；
-- 将 `/drone/mission_goal` 转换为顺序 `/drone/goal` 航点；
-- 处理新任务重规划、航点切换、最终 yaw 和稳定完成状态。
+- 使用 Chaikin 候选、精确线段检查和不超过 `0.05 m` 的致密复检；
+- 保留关键拐点并按弧长重采样，以 20 Hz 前视参考更新 `/drone/goal`；
+- 先垂直起飞，普通路径点满足 `minimum_flight_z`；
+- 管理单目标、多航点、暂停、继续、取消、最终 yaw 和稳定完成。
 
-### 3.6 预留包
+### 3.6 `drone_ground_station`
+
+职责：
+
+- 在 Qt 主线程创建和更新全部 QWidget；
+- 在后台 QThread 中独占 rclpy Node 与 executor；
+- 订阅 Odom、IMU、RPM、Path、地图和规划/任务 JSON；
+- 发布单目标、多航点和任务命令；
+- 使用 QProcess 与独立进程组启动/停止自身仿真；
+- 导出 CSV、PNG、JSON 和截图。
+
+当前只支持一架无人机，Qt 二维视图不替代 RViz。
+
+### 3.7 预留包
 
 `drone_msgs` 仍没有 `.msg/.srv/.action` 定义。地图与规划继续复用标准消息。
 
@@ -131,7 +152,10 @@ flowchart LR
 | `acceptance_test_node` | `drone_bringup` | Python | 10 Hz | 发目标并判定收敛 |
 | `static_map_node` | `drone_map` | Python | 静态一次发布 | 地图 MarkerArray |
 | `planner_node` | `drone_planner` | Python | 事件驱动 | 3D A*、简化和航点执行 |
+| `mission_manager_node` | `drone_planner` | Python | 事件驱动 | 多航点顺序任务 |
 | `planning_acceptance_node` | `drone_bringup` | Python | 10 Hz | 规划路径与实际轨迹联合验收 |
+| `showcase_acceptance_node` | `drone_bringup` | Python | 10 Hz | 展示正负向自动验收 |
+| `ground_station_bridge` | `drone_ground_station` | Python | 后台线程 | Qt 与 ROS2 数据桥 |
 
 `acceptance_test_node` 只在基础验收启动。`planning_acceptance_node` 只在规划验收启动；它结束时触发整个 launch 清理。
 
@@ -142,7 +166,8 @@ flowchart LR
     U["用户/规划验收"]
     MG["/drone/mission_goal"]
     MAP["static_map_node<br/>共享 YAML + AABB"]
-    PLAN["planner_node<br/>3D A* + LOS + 航点"]
+    PLAN["planner_node<br/>A* + LOS + 平滑 + 前视"]
+    MM["mission_manager_node<br/>多段任务"]
     PP["/drone/planned_path"]
     G["/drone/goal"]
     C["position_controller_node"]
@@ -153,6 +178,7 @@ flowchart LR
     V["RViz2"]
 
     U --> MG --> PLAN
+    U --> MM --> MG
     MAP --> PLAN
     MAP --> V
     PLAN --> PP --> V
@@ -175,10 +201,20 @@ flowchart LR
 | `/drone/mission_goal` | `geometry_msgs/msg/PoseStamped` | 用户或规划验收 | 规划器 | `map` 系最终任务目标 | 事件驱动 |
 | `/drone/goal` | `geometry_msgs/msg/PoseStamped` | 用户/基础验收或规划器 | 控制器、目标 Marker | 当前控制目标或安全航点 | 事件驱动 |
 | `/map/obstacles` | `visualization_msgs/msg/MarkerArray` | 静态地图 | RViz | 原始 AABB 和地图边界；仅用于显示 | 静态 |
-| `/drone/planned_path` | `nav_msgs/msg/Path` | 规划器 | RViz、规划验收 | 简化后的安全航点折线 | 每次成功规划 |
+| `/map/inflated_obstacles` | `visualization_msgs/msg/MarkerArray` | 静态地图 | RViz | 真实膨胀安全区 | 静态 |
+| `/map/obstacle_points` | `sensor_msgs/msg/PointCloud2` | 静态地图 | RViz | 可选表面显示点云 | 静态 |
+| `/drone/mission_waypoints` | `nav_msgs/msg/Path` | 用户/Qt | 任务管理器 | 多段任务目标 | 事件驱动 |
+| `/drone/mission_command` | `std_msgs/msg/String` | 用户/Qt | 任务管理器、规划器 | START/PAUSE/RESUME/CANCEL/CLEAR | 事件驱动 |
+| `/drone/mission_status` | `std_msgs/msg/String` | 任务管理器 | Qt/验收 | 任务 JSON | 状态变化 |
+| `/drone/mission_progress` | `std_msgs/msg/Float32` | 任务管理器 | Qt/记录器 | `[0,1]` | 状态变化 |
+| `/drone/planned_path` | `nav_msgs/msg/Path` | 规划器 | RViz、规划验收 | 重采样后的安全执行路径 | 每次成功规划 |
 | `/drone/current_waypoint` | `visualization_msgs/msg/Marker` | 规划器 | RViz | 当前控制航点 | 航点切换 |
 | `/drone/mission_goal_marker` | `visualization_msgs/msg/Marker` | 规划器 | RViz | 最终任务目标 | 每次新任务 |
 | `/drone/planner_status` | `std_msgs/msg/String` | 规划器 | 规划验收/观察者 | JSON；状态与规划指标 | 状态变化 |
+| `/drone/planning_metrics` | `std_msgs/msg/String` | 规划器 | Qt/记录器 | 规划指标 JSON | 指标变化 |
+| `/drone/avoidance_active` | `std_msgs/msg/Bool` | 规划器 | Qt/记录器 | 直线路径是否受阻 | 每次规划 |
+| `/drone/min_obstacle_clearance` | `std_msgs/msg/Float32` | 规划器 | Qt/记录器 | 规划路径净空，m | 每次规划 |
+| `/drone/current_waypoint_index` | `std_msgs/msg/Int32` | 规划器 | Qt/记录器 | 当前前视参考索引 | 进度变化 |
 | `/drone/motor_rpm_cmd` | `std_msgs/msg/Float32MultiArray` | 控制器 | 动力学 | `[M1,M2,M3,M4]`，单位 RPM | 100 Hz |
 | `/drone/motor_rpm` | `std_msgs/msg/Float32MultiArray` | 动力学 | 外部观察者 | 实际电机 RPM | 约 50 Hz |
 | `/drone/odom` | `nav_msgs/msg/Odometry` | 动力学 | 控制器、验收节点 | 世界系位置/速度，机体系角速度 | 约 50 Hz |

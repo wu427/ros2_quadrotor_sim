@@ -42,8 +42,8 @@ docs/evidence/
 - [x] 已存在 `drone_dynamics`，包含四电机一阶响应、6DoF 刚体动力学、阻力、地面约束、状态发布和 TF。
 - [x] 已存在 `drone_controller`，包含位置 PD、几何姿态控制、角速度反馈、mixer 和限幅。
 - [x] 已存在 `drone_bringup`，包含参数、launch、URDF、RViz、目标 Marker 和单目标自动验收节点。
-- [x] 已确认 `drone_map`、`drone_planner`、`drone_msgs` 当前仅为包骨架，没有业务节点或自定义消息。
-- [x] 已确认仓库缺少正式 `README.md`、`LICENSE`、`ai_usage.md`、运行脚本、报告和演示材料。
+- [x] 阶段 0 当时确认 `drone_map`、`drone_planner`、`drone_msgs` 仅为包骨架；阶段 7-9 已实现地图、规划与任务能力，`drone_msgs` 仍为空包。
+- [x] 阶段 0 当时缺少正式 README 与 AI 说明；阶段 9-10 已新增 `README.md` 和 `ai_usage.md`，最终报告与视频仍未完成。
 - [x] 已确认仓库及用户主目录的可见范围内没有 Word 模板文件。
 
 ### 2.2 2026-07-25 实测基线
@@ -477,6 +477,10 @@ docs/evidence/
 
 ### 工作
 
+展示增强子阶段证据见
+`docs/evidence/phase-09/TEST_SUMMARY.md`。其中复杂地图、安全平滑、任务管理
+与正负向场景已完成；本阶段的长时间稳定性与干净克隆发布验证仍未完成。
+
 - [ ] 冻结依赖、默认参数、接口和场景文件。
 - [ ] 建立一条总回归命令，覆盖 build、lint、unit、integration 和 scenario。
 - [ ] 增加参数边界、非法消息、节点晚启动和节点退出的故障测试。
@@ -511,6 +515,10 @@ docs/evidence/
 完成 Git 仓库、6-10 页报告、1-3 分钟演示视频和 AI 使用说明。
 
 ### 工作
+
+Qt 地面站子阶段证据见
+`docs/evidence/phase-10/TEST_SUMMARY.md`。地面站、offscreen 自动测试和导出
+链路已完成；根据本次范围，最终 LaTeX/PDF 与演示视频保持未完成。
 
 - [ ] 按 `docs/WORD_WRITING_GUIDE.md` 完成正式报告。
 - [ ] 若收到 Word 模板，先提炼模板样式并更新写作规范。
