@@ -1,0 +1,830 @@
+% Compile from the repository root:
+% tectonic --outdir output/pdf docs/latex/ros2_quadrotor_project_manual.tex
+% The final artifact is output/pdf/ros2_quadrotor_project_manual.pdf.
+\documentclass[UTF8,a4paper,12pt,fontset=fandol]{ctexart}
+
+\usepackage[left=25.4mm,right=25.4mm,top=25.4mm,bottom=25.4mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,longtable,tabularx,array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
+\usepackage{listings}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{bookmark}
+\usepackage{caption}
+\usepackage[most]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{lastpage}
+
+\definecolor{Primary}{HTML}{174A7E}
+\definecolor{Secondary}{HTML}{2F6F62}
+\definecolor{Warn}{HTML}{A14B32}
+\definecolor{SoftBlue}{HTML}{EAF2F8}
+\definecolor{SoftGreen}{HTML}{EAF4EF}
+\definecolor{SoftGray}{HTML}{F3F5F7}
+\definecolor{DarkText}{HTML}{20262D}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=Primary,
+  urlcolor=Primary,
+  citecolor=Secondary,
+  pdftitle={ROS2 四旋翼仿真项目执行、测试与架构手册},
+  pdfauthor={ros2_quadrotor_sim},
+  pdfsubject={项目分阶段执行、测试、架构和文档规范}
+}
+\urlstyle{tt}
+
+\setlength{\parindent}{2em}
+\setlength{\parskip}{4pt}
+\setlist[itemize]{leftmargin=2.2em,itemsep=2pt,topsep=3pt}
+\setlist[enumerate]{leftmargin=2.4em,itemsep=2pt,topsep=3pt}
+\renewcommand{\arraystretch}{1.25}
+
+\titleformat{\section}{\Large\bfseries\color{Primary}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries\color{DarkText}}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{DarkText}}{\thesubsubsection}{0.7em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{ROS2 四旋翼仿真项目手册}
+\fancyhead[R]{\nouppercase{\leftmark}}
+\fancyfoot[C]{第 \thepage\ 页，共 \pageref{LastPage} 页}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\lstdefinestyle{projectcode}{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{SoftGray},
+  frame=single,
+  rulecolor=\color{gray!40},
+  breaklines=true,
+  columns=fullflexible,
+  keepspaces=true,
+  showstringspaces=false,
+  xleftmargin=1em,
+  xrightmargin=1em,
+  aboveskip=6pt,
+  belowskip=6pt
+}
+\lstset{style=projectcode}
+
+\newcommand{\unchecked}{\(\square\)}
+\newcommand{\checked}{\(\boxtimes\)}
+\newcommand{\workitem}[1]{\item[\unchecked] #1}
+\newcommand{\doneitem}[1]{\item[\checked] #1}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\tcode}[1]{\nolinkurl{#1}}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+
+\newtcolorbox{statusbox}[1][]{
+  colback=SoftBlue,
+  colframe=Primary,
+  boxrule=0.7pt,
+  arc=2pt,
+  title=#1,
+  fonttitle=\bfseries
+}
+
+\newtcolorbox{warningbox}[1][]{
+  colback=Warn!6,
+  colframe=Warn,
+  boxrule=0.7pt,
+  arc=2pt,
+  title=#1,
+  fonttitle=\bfseries
+}
+
+\newtcolorbox{gatebox}[1][]{
+  colback=SoftGreen,
+  colframe=Secondary,
+  boxrule=0.7pt,
+  arc=2pt,
+  title=#1,
+  fonttitle=\bfseries
+}
+
+\begin{document}
+
+\begin{titlepage}
+  \centering
+  \vspace*{2.0cm}
+  {\Huge\bfseries\color{Primary} ROS2 四旋翼仿真项目\par}
+  \vspace{0.6cm}
+  {\LARGE\bfseries 执行、测试与架构手册\par}
+  \vspace{1.2cm}
+  {\large Markdown 配套文档的 LaTeX 汇总版\par}
+  \vfill
+  \begin{tcolorbox}[
+    width=0.82\textwidth,
+    colback=SoftBlue,
+    colframe=Primary,
+    boxrule=0.8pt,
+    arc=3pt
+  ]
+    \centering
+    \begin{tabular}{@{}ll@{}}
+      项目 & \code{ros2\_quadrotor\_sim} \\
+      目标环境 & Ubuntu 22.04 / ROS2 Humble \\
+      基线日期 & 2026-07-24 \\
+      文档状态 & 初版，可按阶段持续勾选和更新 \\
+    \end{tabular}
+  \end{tcolorbox}
+  \vfill
+  {\large 由项目当前源码、配置、构建与实测结果整理\par}
+  \vspace{1.0cm}
+\end{titlepage}
+
+\pagenumbering{Roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
+
+\section{文档目的与使用方法}
+
+本手册用于指导项目从当前核心仿真原型推进到可公开复现的最终交付。工作和测试项均带方框；只有在完成工作并留下证据后，才将 \unchecked 改为 \checked。
+
+\begin{itemize}
+  \item \checked：当前提交中已经核对，或已在本环境实际执行。
+  \item \unchecked：尚未完成，或虽有代码但未按本手册重新验证。
+  \item 每个阶段必须满足“阶段出口”后才能进入下一阶段。
+  \item 历史交接记录只作为线索，不自动等同于当前结果。
+  \item 可提交证据建议放在 \code{docs/evidence/phase-XX/}。
+\end{itemize}
+
+\begin{warningbox}[Word 模板状态]
+当前仓库和可见用户目录中没有发现 Word 模板文件。因此本文档中的字体、字号和页边距采用明确标注的“无模板回退样式”，不是从不存在的模板推断得出。正式模板到位后必须重新提炼样式。
+\end{warningbox}
+
+\section{当前项目基线}
+
+\subsection{已确认实现}
+
+\begin{itemize}
+  \doneitem{\code{drone\_dynamics} 已实现四电机一阶响应、6DoF 刚体动力学、阻力、地面约束、Odom、IMU、Path、实际 RPM 和 TF。}
+  \doneitem{\code{drone\_controller} 已实现位置 PD、期望姿态、几何姿态反馈、角速度反馈、mixer 和限幅。}
+  \doneitem{\code{drone\_bringup} 已包含参数、launch、URDF、RViz、目标 Marker 和单目标验收节点。}
+  \doneitem{\code{drone\_map}、\code{drone\_planner}、\code{drone\_msgs} 当前仅为空包骨架。}
+  \doneitem{仓库目前缺少正式 README、LICENSE、AI 使用说明、运行脚本、报告和最终演示材料。}
+\end{itemize}
+
+\subsection{实测结果}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{0.23\textwidth}
+                  >{\raggedright\arraybackslash}p{0.20\textwidth}
+                  >{\raggedright\arraybackslash}p{0.48\textwidth}}
+\toprule
+检查项 & 状态 & 结论 \\
+\midrule
+\endfirsthead
+\toprule
+检查项 & 状态 & 结论 \\
+\midrule
+\endhead
+全包构建 & 通过 & 6 个 ROS2 包完成 \code{colcon build --symlink-install}。 \\
+现有自动测试 & 通过但覆盖不足 & 13 项、0 error、0 failure、3 skipped；主要是 Python 风格和 CMake/XML lint。 \\
+动力学/控制器单元测试 & 缺失 & 当前没有行为级数学测试。 \\
+默认系统验收 & 未通过 & 两次实测分别出现无 odometry、状态保持零且未收敛。 \\
+外层退出码 & 有误判风险 & 验收子进程 FAIL 时，外层 launch 仍可能返回 0。 \\
+\bottomrule
+\end{longtable}
+
+\begin{warningbox}[当前最高优先级]
+先修复并稳定验证 \code{goal -> controller -> motor RPM -> dynamics -> odom -> controller} 闭环，同时修复失败退出码传播。不得在闭环未稳定前开始地图、规划或报告美化。
+\end{warningbox}
+
+\section{当前系统架构}
+
+\subsection{包级职责}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=12mm and 12mm,
+  box/.style={draw=Primary, rounded corners, align=center, minimum width=34mm,
+              minimum height=13mm, fill=SoftBlue, font=\small},
+  optional/.style={draw=gray, dashed, rounded corners, align=center,
+                   minimum width=30mm, minimum height=12mm,
+                   fill=SoftGray, font=\small},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, draw=Primary},
+  future/.style={-{Latex[length=2.5mm]}, dashed, draw=gray}
+]
+  \node[box] (bringup) {\code{drone\_bringup}\\启动、配置、可视化、验收};
+  \node[box, below left=of bringup] (controller) {\code{drone\_controller}\\位置/姿态控制};
+  \node[box, below right=of bringup] (dynamics) {\code{drone\_dynamics}\\电机与 6DoF 动力学};
+  \node[optional, below=of controller] (planner) {\code{drone\_planner}\\未实现};
+  \node[optional, below=of dynamics] (map) {\code{drone\_map}\\未实现};
+  \node[optional, below=of bringup, yshift=-43mm] (msgs) {\code{drone\_msgs}\\未定义消息};
+
+  \draw[arrow] (bringup) -- (controller);
+  \draw[arrow] (bringup) -- (dynamics);
+  \draw[future] (map) -- (planner);
+  \draw[future] (planner) -- (controller);
+  \draw[future] (msgs) -- (controller);
+\end{tikzpicture}
+\captionof{figure}{当前包级架构；虚线框为尚未实现的可选能力}
+\end{center}
+
+\subsection{控制闭环}
+
+\begin{center}
+\begin{tikzpicture}[
+  scale=0.96,
+  transform shape,
+  node distance=10mm and 8mm,
+  data/.style={draw=Secondary, rounded corners, align=center, fill=SoftGreen,
+               minimum height=11mm, font=\small},
+  proc/.style={draw=Primary, rounded corners, align=center, fill=SoftBlue,
+               minimum height=13mm, font=\small},
+  arrow/.style={-{Latex[length=2.2mm]}, thick}
+]
+  \node[data] (goal) {\code{/drone/goal}\\PoseStamped};
+  \node[proc, right=of goal] (ctrl) {位置/姿态控制器};
+  \node[data, right=of ctrl] (rpm) {\code{/drone/motor\_rpm\_cmd}\\4 路 RPM};
+  \node[proc, right=of rpm] (dyn) {电机与 6DoF 动力学};
+  \node[data, below=of dyn] (odom) {\code{/drone/odom}\\Odometry};
+  \node[data, below=of rpm] (outputs) {IMU / Path / TF\\实际 RPM};
+
+  \draw[arrow] (goal) -- (ctrl);
+  \draw[arrow] (ctrl) -- (rpm);
+  \draw[arrow] (rpm) -- (dyn);
+  \draw[arrow] (dyn) -- (odom);
+  \draw[arrow] (odom.west) -| (ctrl.south);
+  \draw[arrow] (dyn) -- (outputs);
+\end{tikzpicture}
+\captionof{figure}{当前核心控制闭环}
+\end{center}
+
+\subsection{运行时节点}
+
+{\small
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{P{0.23\textwidth}P{0.16\textwidth}P{0.09\textwidth}P{0.11\textwidth}P{0.25\textwidth}}
+\toprule
+节点 & 包 & 语言 & 频率 & 职责 \\
+\midrule
+\endfirsthead
+\toprule
+节点 & 包 & 语言 & 频率 & 职责 \\
+\midrule
+\endhead
+\tcode{quadrotor_dynamics_node} & \tcode{drone_dynamics} & C++ & 积分 200 Hz & 电机、动力学和状态发布 \\
+\tcode{position_controller_node} & \tcode{drone_controller} & C++ & 100 Hz & 位置/姿态控制和 mixer \\
+\tcode{goal_marker_node} & \tcode{drone_bringup} & Python & 5 Hz & 持续发布目标球 \\
+\tcode{acceptance_test_node} & \tcode{drone_bringup} & Python & 10 Hz & 发目标并判定稳定 \\
+\tcode{robot_state_publisher} & ROS2 外部包 & C++ & 事件驱动 & 发布 URDF 固定变换 \\
+\tcode{rviz2} & ROS2 外部包 & C++ & 30 FPS & 显示模型、目标和轨迹 \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{ROS2 接口}
+
+{\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{longtable}{P{0.21\textwidth}P{0.26\textwidth}P{0.16\textwidth}P{0.22\textwidth}}
+\toprule
+Topic & Type & Publisher & Subscriber / 用途 \\
+\midrule
+\endfirsthead
+\toprule
+Topic & Type & Publisher & Subscriber / 用途 \\
+\midrule
+\endhead
+\tcode{/drone/goal} & \tcode{geometry_msgs/PoseStamped} & 用户/验收 & 控制器、目标 Marker \\
+\tcode{/drone/motor_rpm_cmd} & \tcode{std_msgs/Float32MultiArray} & 控制器 & 动力学；4 路 RPM \\
+\tcode{/drone/motor_rpm} & \tcode{std_msgs/Float32MultiArray} & 动力学 & 实际电机 RPM \\
+\tcode{/drone/odom} & \tcode{nav_msgs/Odometry} & 动力学 & 控制器、验收 \\
+\tcode{/drone/imu} & \tcode{sensor_msgs/Imu} & 动力学 & 理想 IMU \\
+\tcode{/drone/path} & \tcode{nav_msgs/Path} & 动力学 & RViz 实际轨迹 \\
+\tcode{/drone/desired_pose} & \tcode{geometry_msgs/PoseStamped} & 控制器 & RViz 期望姿态 \\
+\tcode{/drone/goal_marker} & \tcode{visualization_msgs/Marker} & Marker 节点 & RViz 目标球 \\
+\tcode{/tf} & \tcode{tf2_msgs/TFMessage} & 动力学等 & \tcode{map -> base_link} \\
+\tcode{/tf_static} & \tcode{tf2_msgs/TFMessage} & RSP & \tcode{base_link -> body_link} \\
+\bottomrule
+\end{longtable}
+}
+
+\subsection{电机顺序、坐标系与单位}
+
+电机顺序是硬接口：M1 前左、M2 前右、M3 后右、M4 后左。外部 topic 使用 RPM；进入物理模型前转换为 rad/s：
+
+\begin{align}
+\omega_i &= \mathrm{rpm}_i \frac{2\pi}{60},\\
+F_i &= k_F \omega_i^2.
+\end{align}
+
+当前力矩定义为：
+
+\begin{align}
+\tau_x &= \frac{l}{\sqrt{2}}(F_1-F_2-F_3+F_4),\\
+\tau_y &= \frac{l}{\sqrt{2}}(-F_1-F_2+F_3+F_4),\\
+\tau_z &= k_M(-\omega_1^2+\omega_2^2-\omega_3^2+\omega_4^2).
+\end{align}
+
+TF 主链为：
+
+\[
+\code{map} \longrightarrow \code{base\_link} \longrightarrow \code{body\_link}.
+\]
+
+\code{map -> base\_link} 为动力学动态变换；\code{base\_link -> body\_link} 为 URDF 固定变换。
+
+\subsection{动力学和控制器摘要}
+
+电机一阶响应：
+
+\begin{align}
+\alpha &= \mathrm{clamp}\left(\frac{\Delta t}{\tau_m},0,1\right),\\
+\mathrm{rpm}_{a} &\leftarrow \mathrm{rpm}_{a}
+ + \alpha(\mathrm{rpm}_{c}-\mathrm{rpm}_{a}).
+\end{align}
+
+平动方程：
+
+\begin{align}
+\mathbf{F}_{w} &= \mathbf{R}_{bw}
+\begin{bmatrix}0&0&\sum_iF_i\end{bmatrix}^{T},\\
+\mathbf{a} &= \frac{\mathbf{F}_{w}
+ \begin{bmatrix}0&0&-mg\end{bmatrix}^{T}
+ \mathbf{F}_{drag}}{m}.
+\end{align}
+
+转动方程：
+
+\[
+\mathbf{I}\dot{\boldsymbol{\omega}}
+= \boldsymbol{\tau}
+- \boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})
+- \mathbf{D}_{\omega}\boldsymbol{\omega}.
+\]
+
+位置环：
+
+\[
+\mathbf{a}_{des}
+= \mathbf{K}_{p}\odot(\mathbf{p}_{des}-\mathbf{p})
+- \mathbf{K}_{d}\odot\mathbf{v}.
+\]
+
+姿态环：
+
+\begin{align}
+\mathbf{e}_{R} &= \mathrm{vee}\left(
+\frac{1}{2}(\mathbf{R}_{d}^{T}\mathbf{R}
+-\mathbf{R}^{T}\mathbf{R}_{d})\right),\\
+\boldsymbol{\tau} &= -\mathbf{K}_{R}\odot\mathbf{e}_{R}
+-\mathbf{K}_{\omega}\odot\boldsymbol{\omega}
++\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega}).
+\end{align}
+
+\section{分阶段执行与测试计划}
+
+\subsection{阶段总览}
+
+\begin{longtable}{p{0.08\textwidth}p{0.34\textwidth}p{0.15\textwidth}p{0.32\textwidth}}
+\toprule
+阶段 & 范围 & 属性 & 阶段出口 \\
+\midrule
+\endfirsthead
+\toprule
+阶段 & 范围 & 属性 & 阶段出口 \\
+\midrule
+\endhead
+0 & 基线与闭环故障处理 & 必做 & 默认验收连续 3 次 PASS，失败返回非零 \\
+1 & 工程、元数据和脚本 & 必做 & 干净环境可重复构建和运行 \\
+2 & 动力学验证 & 必做 & 公式、符号、边界和频率有自动测试 \\
+3 & 控制器和 mixer 验证 & 必做 & 每个数学子步骤有测试 \\
+4 & ROS 接口、TF、URDF、RViz & 必做 & 接口契约和显示一致 \\
+5 & 场景测试与指标 & 必做 & 悬停、目标、多目标可复现 \\
+6 & README 和技术文档 & 必做 & 新用户按文档可复现 \\
+7 & 静态地图 & 选做 & 至少 5 个障碍物可复现 \\
+8 & 规划与避障 & 选做 & 无碰撞到达且安全距离达标 \\
+9 & 回归与发布候选 & 必做 & 干净克隆全链路通过 \\
+10 & 报告、PDF、视频、发布 & 必做 & 最终交付物完整一致 \\
+\bottomrule
+\end{longtable}
+
+\subsection{阶段 0：闭环故障与验收可信度}
+
+\subsubsection{工作}
+\begin{itemize}
+  \doneitem{完成源码、配置、构建产物和历史材料盘点。}
+  \doneitem{执行全包构建和现有测试。}
+  \doneitem{重复执行默认验收并保留失败事实。}
+  \workitem{记录 ROS、RMW、Domain ID、localhost 和 WSL 网络环境。}
+  \workitem{用 \code{ros2 topic info -v} 核对 publisher、subscriber 和 QoS。}
+  \workitem{分别检查 odom、RPM 命令和实际 RPM 是否持续更新。}
+  \workitem{区分代码、定时器、执行器与 DDS 发现问题。}
+  \workitem{修复导致闭环不运动或消息偶发断开的根因。}
+  \workitem{让验收子进程失败可靠传播为外层非零退出码。}
+  \workitem{冻结基线参数并记录参数文件 SHA-256。}
+\end{itemize}
+
+\subsubsection{测试}
+\begin{itemize}
+  \workitem{冷启动 3 秒内出现 odom，频率约 50 Hz。}
+  \workitem{收到目标后 RPM 命令约 100 Hz。}
+  \workitem{实际 RPM 能跟踪命令并体现电机一阶动态。}
+  \workitem{默认目标连续 3 次 PASS。}
+  \workitem{极短超时、停止控制器、错误 topic 均明确 FAIL。}
+  \workitem{PASS、FAIL、Ctrl+C 三条退出路径均无残留进程。}
+\end{itemize}
+
+\begin{gatebox}[阶段 0 出口]
+\unchecked 默认验收连续 3 次 PASS；\quad
+\unchecked 故障注入稳定 FAIL；\quad
+\unchecked 退出码与结果一致；\quad
+\unchecked 根因和证据已归档。
+\end{gatebox}
+
+\subsection{阶段 1：工程结构、元数据和脚本}
+
+\subsubsection{工作}
+\begin{itemize}
+  \workitem{创建 README、LICENSE 和 AI 使用说明骨架。}
+  \workitem{替换包描述、版本、维护者和邮箱中的模板占位信息。}
+  \workitem{核对 package.xml、CMake 和源码实际依赖。}
+  \workitem{所有使用 C++17 的包显式设置 C++17。}
+  \workitem{决定空包保留策略，并在 README 中如实标记。}
+  \workitem{创建 build、clean、run、acceptance、topic-check 和 test 脚本。}
+  \workitem{脚本统一使用 \code{set -euo pipefail} 并自动定位根目录。}
+  \workitem{处理错误的 Zone.Identifier，完善 .gitignore。}
+\end{itemize}
+
+\subsubsection{测试}
+\begin{itemize}
+  \workitem{删除 build/install/log 后从零构建成功。}
+  \workitem{脚本从任意工作目录调用仍能定位仓库。}
+  \workitem{无 RViz 模式不启动 GUI 且核心节点完整。}
+  \workitem{clean 脚本只删除仓库内生成目录。}
+  \workitem{rosdep 能解析所有声明依赖。}
+  \workitem{阶段 0 验收无回归。}
+\end{itemize}
+
+\subsection{阶段 2：动力学模型验证}
+
+\subsubsection{工作}
+\begin{itemize}
+  \workitem{把纯数学计算从 ROS 回调提取为可测试函数。}
+  \workitem{明确状态、坐标系、旋向、符号、单位和积分顺序。}
+  \workitem{为质量、惯量、频率、系数、阻力和 RPM 上限增加校验。}
+  \workitem{明确 IMU 是理想比力，当前没有噪声、偏置和协方差。}
+  \workitem{明确使用墙钟；若新增 /clock，单独设计和测试。}
+  \workitem{将 Path 上限改为可配置或明确长期运行限制。}
+\end{itemize}
+
+\subsubsection{测试}
+\begin{itemize}
+  \workitem{零 RPM 时推力和力矩为零。}
+  \workitem{四电机相同 RPM 时三轴力矩接近零。}
+  \workitem{理论悬停 RPM 与 \(\sqrt{mg/(4k_F)}\) 一致。}
+  \workitem{单电机扰动的 roll/pitch/yaw 符号正确。}
+  \workitem{阶跃响应符合电机时间常数。}
+  \workitem{负值、上溢、NaN、Inf 均被安全处理。}
+  \workitem{四元数长时间积分后保持归一化。}
+  \workitem{无推力自由落体、地面约束和阻力方向正确。}
+  \workitem{发布 frame、频率、实际 RPM 和 TF 正确。}
+  \workitem{运行 10 分钟无 NaN、状态重置或异常增长。}
+\end{itemize}
+
+\subsection{阶段 3：控制器与 mixer 验证}
+
+\subsubsection{工作}
+\begin{itemize}
+  \workitem{提取位置环、限幅、期望姿态、姿态误差和 mixer 纯函数。}
+  \workitem{明确当前为 PD 控制，不宣称存在积分项。}
+  \workitem{对控制参数增加有限值、正值和范围校验。}
+  \workitem{校验控制器和动力学共享物理参数一致。}
+  \workitem{记录远目标截断、倾角限制和推力上限的真实语义。}
+  \workitem{定义电机饱和时的可接受退化行为。}
+\end{itemize}
+
+\subsubsection{测试}
+\begin{itemize}
+  \workitem{缺少 goal 或 odom 时四电机输出为零。}
+  \workitem{零误差水平姿态时输出理论悬停 RPM。}
+  \workitem{x/y/z 误差产生正确方向的期望加速度。}
+  \workitem{水平、竖直加速度与倾角限幅正确。}
+  \workitem{目标四元数归一化，零四元数按 yaw=0 处理。}
+  \workitem{超过 10 m 的目标按定义截断。}
+  \workitem{几何姿态误差和 torque 符号正确。}
+  \workitem{mixer 正反算一致，输出始终有限并在范围内。}
+  \workitem{悬停、纯轴向、纯 yaw 和大阶跃场景不发散。}
+\end{itemize}
+
+\subsection{阶段 4：接口、TF、URDF 与 RViz}
+
+\subsubsection{工作}
+\begin{itemize}
+  \workitem{冻结 topic、type、QoS、publisher、subscriber、rate 和 frame。}
+  \workitem{评估是否继续使用 Float32MultiArray；改消息时提供迁移说明。}
+  \workitem{统一 \code{map -> base\_link -> body\_link} 语义。}
+  \workitem{核对 URDF 质量/惯量与 YAML 和动力学一致。}
+  \workitem{RViz 显示模型、轨迹、目标、期望姿态和必要 TF。}
+  \workitem{为 topic 和 TF 添加机器可检查的契约测试。}
+\end{itemize}
+
+\subsubsection{测试}
+\begin{itemize}
+  \workitem{运行时 topic 类型与架构表完全一致。}
+  \workitem{每个 topic 的发布者、订阅者和 QoS 符合契约。}
+  \workitem{TF 无断链、重复发布或环。}
+  \workitem{RobotModel 姿态、机头方向和实际运动一致。}
+  \workitem{目标 Marker、Desired Pose 和 Path 与消息一致。}
+  \workitem{\code{rviz:=false} 不改变核心仿真。}
+\end{itemize}
+
+\subsection{阶段 5：场景测试与数据产品}
+
+\subsubsection{工作}
+\begin{itemize}
+  \workitem{把单目标验收纳入 colcon 可管理的集成测试。}
+  \workitem{实现 3--4 个 waypoint 的多目标场景运行器。}
+  \workitem{记录位置、速度、姿态、目标、四电机 RPM 和误差。}
+  \workitem{输出 CSV/JSON 原始数据和可重复绘图脚本。}
+  \workitem{定义到达时间、超调、稳态误差、饱和占比和路径长度。}
+  \workitem{随机或扰动场景固定种子。}
+\end{itemize}
+
+\subsubsection{必做场景}
+\begin{itemize}
+  \workitem{悬停 \((0,0,1.5,0^\circ)\)。}
+  \workitem{单目标 \((2,1,1.5,90^\circ)\)。}
+  \workitem{扩展目标 \((3,-1,2,45^\circ)\)。}
+  \workitem{负坐标目标 \((-1,2,1,-90^\circ)\)。}
+  \workitem{正方形或矩形 4 waypoint。}
+  \workitem{到达后稳定保持至少 10 秒。}
+  \workitem{关键场景各重复至少 3 次。}
+\end{itemize}
+
+\subsubsection{每场景判据}
+\begin{itemize}
+  \workitem{位置、偏航、线速度、角速度和稳定时间均达标。}
+  \workitem{无 NaN、重置、崩溃、TF 中断和长期 RPM 饱和。}
+  \workitem{保存到达时间、最大超调、稳态误差和 RPM 曲线。}
+  \workitem{任务最低 0.3 m 与项目严格 0.05 m 标准分开报告。}
+\end{itemize}
+
+\subsection{阶段 6：README、技术文档和 AI 使用说明}
+
+\begin{itemize}
+  \workitem{README 覆盖简介、架构、依赖、构建、运行、目标、验收、接口、参数、结果和限制。}
+  \workitem{完成动力学、控制器、ROS 接口和测试文档。}
+  \workitem{\code{ai\_usage.md} 记录至少 8 条关键 prompt/交互摘要。}
+  \workitem{记录 AI 错误、发现方式和修复证据。}
+  \workitem{说明参考项目中参考、重写和差异化的内容。}
+  \workitem{在干净环境中逐条执行 README 命令。}
+  \workitem{核对文档公式、默认值、接口和结果与代码一致。}
+\end{itemize}
+
+\subsection{阶段 7：静态地图（选做）}
+
+\begin{itemize}
+  \workitem{实现地图节点和可计算的障碍物数据。}
+  \workitem{提供至少 5 个起终点之间的静态障碍物。}
+  \workitem{使用固定场景或固定随机种子。}
+  \workitem{定义边界、无人机半径和安全膨胀距离。}
+  \workitem{发布 \code{/map/obstacles} 并在 RViz 显示。}
+  \workitem{验证同一配置可复现、起终点合法、直线受阻。}
+  \workitem{验证 Marker 几何与碰撞几何一致。}
+\end{itemize}
+
+\subsection{阶段 8：路径规划与避障（选做）}
+
+\begin{itemize}
+  \workitem{先写算法输入、输出、假设和失败条件。}
+  \workitem{优先实现直线碰撞检查加绕行 waypoint，或 3D 栅格 A*。}
+  \workitem{分离用户最终目标和控制器安全参考 topic。}
+  \workitem{对障碍物按机体半径和安全距离膨胀。}
+  \workitem{显示规划路径、当前局部目标和实际轨迹。}
+  \workitem{覆盖无障碍、单障碍、多障碍、狭窄通道、无解和非法目标。}
+  \workitem{实际轨迹最小障碍物距离必须大于安全距离。}
+\end{itemize}
+
+\subsection{阶段 9：回归与发布候选}
+
+\begin{itemize}
+  \workitem{冻结依赖、默认参数、接口和场景。}
+  \workitem{建立 build、lint、unit、integration、scenario 总回归命令。}
+  \workitem{覆盖非法参数、非法消息、节点晚启动和异常退出。}
+  \workitem{运行 10 分钟和 30 分钟资源稳定性测试。}
+  \workitem{检查高频日志、残留进程、DDS 参与者和内存增长。}
+  \workitem{干净克隆后完成 rosdep、构建、测试和验收。}
+  \workitem{最终 Git 状态不包含生成物或敏感信息。}
+\end{itemize}
+
+\subsection{阶段 10：报告、PDF、视频和发布}
+
+\begin{itemize}
+  \workitem{按本手册文档规范完成 6--10 页报告。}
+  \workitem{从最终测试数据重新生成全部图表。}
+  \workitem{完成架构图、动力学流程、控制流程和 TF 图。}
+  \workitem{用 LaTeX 源文件编译 PDF，并记录可复现命令。}
+  \workitem{逐页检查 PDF 的缺字、重叠、裁切和图表清晰度。}
+  \workitem{录制 1--3 分钟视频，展示启动、RViz、轨迹、目标和验收。}
+  \workitem{推送公开仓库并创建对应最终提交的版本标签。}
+\end{itemize}
+
+\section{项目级 Agent 规则摘要}
+
+\subsection{稳定技术栈}
+
+\begin{itemize}
+  \item Ubuntu 22.04、ROS2 Humble、colcon、ament。
+  \item 核心动力学和控制使用 C++17 与 Eigen3。
+  \item Bringup、Marker 和测试编排使用 Python 3 与 rclpy。
+  \item 参数使用 YAML，可视化使用 RViz2、URDF 和 tf2。
+\end{itemize}
+
+\subsection{事实优先级}
+
+\begin{enumerate}
+  \item 当前提交和参数下实际执行的测试；
+  \item 源码和 launch；
+  \item \code{vertical\_sim.yaml}；
+  \item 当前文档；
+  \item 历史交接记录。
+\end{enumerate}
+
+\subsection{代码与测试规则}
+
+\begin{itemize}
+  \item 变更前检查 Git，保留无关用户修改。
+  \item 只修改最小必要范围；算法、格式、文档和新功能不要混成一个提交。
+  \item 数学逻辑优先提取为无 ROS 依赖的可测试函数。
+  \item 外部数值输入检查有限性，启动参数检查物理合法性。
+  \item 修改动力学、控制器、参数、topic、TF、QoS 或 launch 后必须跑核心验收。
+  \item 接口变更、跨包变更、规划集成和发布前必须跑全量回归。
+  \item 验收成功必须同时检查显式 PASS、测试进程结果和外层结果。
+  \item 不能通过无依据放宽阈值来隐藏失败。
+\end{itemize}
+
+\subsection{稳定陷阱}
+
+\begin{itemize}
+  \item 动力学与控制器重复声明物理参数，配置漂移不会触发编译错误。
+  \item topic 使用 RPM，推力和反扭矩系数使用 rad/s 的平方。
+  \item mixer 与动力学电机符号耦合，局部改符号会反转姿态轴。
+  \item Float32MultiArray 没有结构信息，必须验证长度并固定电机顺序。
+  \item 目标四元数为零时按 yaw=0 处理。
+  \item goal 或 odom 未就绪时控制器输出零 RPM。
+  \item 动态 TF 与固定 TF 来源不同，重复发布会产生冲突。
+  \item 当前使用墙钟，不能未经设计就假设支持仿真时间。
+  \item IMU 是理想模型，不具备真实传感器噪声和协方差。
+  \item 独立电机饱和会改变期望力/力矩比例。
+  \item 空包可构建不代表功能已实现。
+  \item build 和 lint 通过不代表飞行闭环可用。
+\end{itemize}
+
+\section{Word 与报告写作规则}
+
+\subsection{无模板回退页面样式}
+
+\begin{longtable}{p{0.30\textwidth}p{0.60\textwidth}}
+\toprule
+项目 & 规则 \\
+\midrule
+\endfirsthead
+\toprule
+项目 & 规则 \\
+\midrule
+\endhead
+纸张 & A4 纵向，单栏 \\
+页边距 & 上下左右均 25.4 mm \\
+页码 & 页脚居中，阿拉伯数字 \\
+页眉 & 默认不使用；正式模板优先 \\
+分页 & 使用分页符/分节符，不用空行控制 \\
+正文 & 中文宋体 12 pt，英文和数字 Times New Roman 12 pt，1.5 倍行距 \\
+一级标题 & 黑体 16 pt，加粗 \\
+二级标题 & 黑体 14 pt，加粗 \\
+三级标题 & 黑体 12 pt，加粗 \\
+图表题 & 宋体 10.5 pt，英文和数字 Times New Roman \\
+代码 & Consolas 9.5 pt \\
+公式 & Cambria Math 11 pt \\
+\bottomrule
+\end{longtable}
+
+\subsection{图表规则}
+
+\begin{itemize}
+  \item 图题在图下，表题在表上；使用自动题注和交叉引用。
+  \item 优先 SVG/EMF；位图建议 300 ppi，最低 150 ppi。
+  \item 图表必须有标题、轴名、单位、图例和场景说明。
+  \item 参数表包含名称、符号、值、单位和来源。
+  \item 结果表包含场景、提交、参数集、运行次数、指标和 PASS/FAIL。
+  \item 不使用三维柱图装饰简单数据，不截断坐标轴而不说明。
+  \item 不平滑原始数据而不说明滤波方法。
+  \item 不用代码或公式截图替代可编辑文本。
+\end{itemize}
+
+\subsection{数据与引用}
+
+正式实验必须绑定 Git commit、参数文件 SHA-256、ROS2 版本、RMW、运行命令、原始数据和绘图脚本。历史指标必须复测后才能写为当前结果。至少保留一个有解释价值的失败案例。
+
+\subsection{模板加入后的处理}
+
+\begin{itemize}
+  \workitem{记录模板路径、SHA-256、页数和分节数。}
+  \workitem{逐页渲染并检查封面、正文、表格、页眉和页脚。}
+  \workitem{提取纸张、边距、标题层级、正文、题注、列表和表格实测值。}
+  \workitem{检查字段、自动编号、交叉引用、文本框、内容控件、批注和修订。}
+  \workitem{用模板实测值替换回退样式，并生成样章比对。}
+\end{itemize}
+
+\section{最终交付门禁}
+
+\subsection{仓库}
+\begin{itemize}
+  \workitem{公开 Git 仓库可访问。}
+  \workitem{README 可指导新用户完成构建和运行。}
+  \workitem{build/install/log 和临时文件未提交。}
+  \workitem{最终标签对应全量回归通过的提交。}
+\end{itemize}
+
+\subsection{测试}
+\begin{itemize}
+  \workitem{全包构建通过。}
+  \workitem{lint、单元、集成和场景测试通过。}
+  \workitem{默认验收连续 3 次 PASS。}
+  \workitem{故障注入可靠 FAIL 并返回非零。}
+  \workitem{结果数字可追溯到原始数据。}
+\end{itemize}
+
+\subsection{报告与 PDF}
+\begin{itemize}
+  \workitem{正文覆盖架构、动力学、控制器、接口、实验、AI 使用和反思。}
+  \workitem{图、表、公式编号和目录正确。}
+  \workitem{PDF 逐页视觉检查，无缺字、重叠、裁切和模糊。}
+  \workitem{PDF 参数、topic 和测试数字与最终代码一致。}
+  \workitem{LaTeX 可从记录命令重新编译。}
+\end{itemize}
+
+\subsection{视频}
+\begin{itemize}
+  \workitem{时长 1--3 分钟。}
+  \workitem{显示启动命令、RViz 无人机、目标、轨迹和验收结果。}
+  \workitem{使用最终发布提交，不使用旧版本录屏。}
+\end{itemize}
+
+\appendix
+\section{常用命令}
+
+\begin{lstlisting}[language=bash]
+cd ~/ros2_quadrotor_sim
+source /opt/ros/humble/setup.bash
+
+colcon build --symlink-install
+source install/setup.bash
+
+colcon test
+colcon test-result --verbose
+
+ros2 launch drone_bringup sim.launch.py
+ros2 launch drone_bringup sim.launch.py rviz:=false
+ros2 launch drone_bringup acceptance_test.launch.py
+\end{lstlisting}
+
+在验收退出码链路修复并测试前，成功判据必须同时包含：
+
+\begin{lstlisting}
+ACCEPTANCE TEST: PASS
+acceptance_test_node exit code 0
+wrapper or CI exit code 0
+\end{lstlisting}
+
+\section{阶段证据记录模板}
+
+\begin{lstlisting}
+# Phase XX 验证记录
+
+- Commit:
+- ROS distro:
+- RMW implementation:
+- Parameter file SHA-256:
+- Date:
+
+## Commands
+## Work completed
+## Test results
+## Metrics
+## Failures and root causes
+## Artifacts
+## Phase gate decision
+\end{lstlisting}
+
+\begin{statusbox}[配套源文档]
+完整 Markdown 清单见：
+\begin{itemize}
+  \item \code{docs/PROJECT\_EXECUTION\_PLAN.md}
+  \item \code{docs/ARCHITECTURE\_OVERVIEW.md}
+  \item \code{AGENTS.md}
+  \item \code{docs/WORD\_WRITING\_GUIDE.md}
+\end{itemize}
+LaTeX 本文档为便于打印、审阅和导出 PDF 的汇总版；阶段推进时，以 Markdown 清单作为可直接勾选的主记录。
+\end{statusbox}
+
+\end{document}
