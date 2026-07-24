@@ -1,12 +1,11 @@
 import math
-import os
-import threading
 import time
 from typing import Optional
 
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
 import rclpy
+from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 
 
@@ -56,18 +55,32 @@ class AcceptanceTestNode(Node):
                 0.05,
             ).value
         )
-        self.required_stable_time = float(
+        required_stable_time = float(
             self.declare_parameter(
                 "required_stable_time",
                 1.0,
             ).value
         )
-        self.timeout_sec = float(
+        self.stable_duration_sec = float(
             self.declare_parameter(
-                "timeout_sec",
+                "stable_duration_sec",
+                required_stable_time,
+            ).value
+        )
+        self.discovery_timeout_sec = float(
+            self.declare_parameter(
+                "discovery_timeout_sec",
                 15.0,
             ).value
         )
+        self.timeout_sec = float(
+            self.declare_parameter(
+                "timeout_sec",
+                20.0,
+            ).value
+        )
+
+        self.validate_parameters()
 
         self.goal_publisher = self.create_publisher(
             PoseStamped,
@@ -86,13 +99,16 @@ class AcceptanceTestNode(Node):
             self.timer_callback,
         )
 
-        self.start_time = time.monotonic()
+        self.discovery_start_time = time.monotonic()
+        self.discovery_elapsed_time = 0.0
+        self.goal_publish_time: Optional[float] = None
         self.stable_since: Optional[float] = None
         self.latest_odom: Optional[Odometry] = None
         self.finished = False
         self.exit_code = 2
         self.log_counter = 0
         self.goal_sent = False
+        self.invalid_odom_warned = False
 
         self.get_logger().info(
             "Acceptance test target: "
@@ -102,38 +118,104 @@ class AcceptanceTestNode(Node):
             f"yaw={self.target_yaw_deg:.1f} deg"
         )
 
+    def validate_parameters(self) -> None:
+        positive_parameters = {
+            "stable_duration_sec": self.stable_duration_sec,
+            "discovery_timeout_sec": self.discovery_timeout_sec,
+            "timeout_sec": self.timeout_sec,
+        }
+        nonnegative_parameters = {
+            "position_tolerance": self.position_tolerance,
+            "yaw_tolerance_deg": self.yaw_tolerance_deg,
+            "linear_speed_tolerance": (
+                self.linear_speed_tolerance
+            ),
+            "angular_speed_tolerance": (
+                self.angular_speed_tolerance
+            ),
+        }
+
+        for name, value in positive_parameters.items():
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(
+                    f"{name} must be finite and greater than zero"
+                )
+
+        for name, value in nonnegative_parameters.items():
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(
+                    f"{name} must be finite and nonnegative"
+                )
+
     def odom_callback(self, message: Odometry) -> None:
+        if not self.is_valid_odometry(message):
+            self.latest_odom = None
+            self.stable_since = None
+
+            if not self.invalid_odom_warned:
+                self.get_logger().warning(
+                    "Ignoring odometry with non-finite state values"
+                )
+                self.invalid_odom_warned = True
+
+            return
+
         self.latest_odom = message
 
     def timer_callback(self) -> None:
         if self.finished:
             return
 
-        elapsed = time.monotonic() - self.start_time
+        now = time.monotonic()
 
         if not self.goal_sent:
-            if (
+            self.discovery_elapsed_time = (
+                now - self.discovery_start_time
+            )
+            controller_ready = (
                 self.goal_publisher.get_subscription_count()
                 > 0
-            ):
+            )
+            odometry_ready = self.latest_odom is not None
+
+            if controller_ready and odometry_ready:
                 self.publish_goal()
                 self.goal_sent = True
+                self.goal_publish_time = time.monotonic()
 
                 self.get_logger().info(
-                    "Goal published to controller"
+                    "Discovery completed"
                 )
-            elif elapsed >= self.timeout_sec:
+                self.get_logger().info(
+                    "Discovery elapsed time: "
+                    f"{self.discovery_elapsed_time:.2f} s"
+                )
+                self.get_logger().info("Goal published")
+                self.get_logger().info(
+                    "Convergence timer started"
+                )
+            elif (
+                self.discovery_elapsed_time
+                >= self.discovery_timeout_sec
+            ):
                 self.finish_failure(
-                    "No controller subscription "
-                    "before timeout"
+                    self.discovery_failure_reason(
+                        controller_ready,
+                        odometry_ready,
+                    )
                 )
 
             return
 
+        convergence_elapsed = self.convergence_elapsed(now)
+
         if self.latest_odom is None:
-            if elapsed >= self.timeout_sec:
+            self.stable_since = None
+
+            if convergence_elapsed >= self.timeout_sec:
                 self.finish_failure(
-                    "No odometry received before timeout"
+                    "Convergence timeout: "
+                    "no valid odometry available",
                 )
             return
 
@@ -163,25 +245,85 @@ class AcceptanceTestNode(Node):
             <= self.angular_speed_tolerance
         )
 
-        now = time.monotonic()
-
         if stable:
             if self.stable_since is None:
                 self.stable_since = now
 
             stable_duration = now - self.stable_since
 
-            if stable_duration >= self.required_stable_time:
-                self.finish_success(metrics, elapsed)
+            if (
+                stable_duration
+                >= self.stable_duration_sec
+            ):
+                self.finish_success(
+                    metrics,
+                    convergence_elapsed,
+                )
                 return
         else:
             self.stable_since = None
 
-        if elapsed >= self.timeout_sec:
+        if convergence_elapsed >= self.timeout_sec:
             self.finish_failure(
-                "Tracking did not converge before timeout",
+                "Convergence timeout: "
+                "tracking did not meet all thresholds",
                 metrics,
             )
+
+    def discovery_failure_reason(
+        self,
+        controller_ready: bool,
+        odometry_ready: bool,
+    ) -> str:
+        if not controller_ready and not odometry_ready:
+            return (
+                "Discovery timeout: missing controller "
+                "subscription and valid odometry"
+            )
+
+        if not controller_ready:
+            return (
+                "Discovery timeout: missing controller "
+                "subscription"
+            )
+
+        return "Discovery timeout: missing valid odometry"
+
+    def convergence_elapsed(
+        self,
+        now: Optional[float] = None,
+    ) -> float:
+        if self.goal_publish_time is None:
+            return 0.0
+
+        if now is None:
+            now = time.monotonic()
+
+        return now - self.goal_publish_time
+
+    @staticmethod
+    def is_valid_odometry(odom: Odometry) -> bool:
+        position = odom.pose.pose.position
+        orientation = odom.pose.pose.orientation
+        linear = odom.twist.twist.linear
+        angular = odom.twist.twist.angular
+
+        values = (
+            position.x,
+            position.y,
+            position.z,
+            orientation.x,
+            orientation.y,
+            orientation.z,
+            orientation.w,
+            linear.x,
+            linear.y,
+            linear.z,
+            angular.x,
+            angular.y,
+            angular.z,
+        )
+        return all(math.isfinite(value) for value in values)
 
     def publish_goal(self) -> None:
         yaw_rad = math.radians(self.target_yaw_deg)
@@ -280,6 +422,8 @@ class AcceptanceTestNode(Node):
             f"{metrics['linear_speed']:.6f} m/s\n"
             f"Angular speed: "
             f"{metrics['angular_speed']:.6f} rad/s\n"
+            f"Discovery time: "
+            f"{self.discovery_elapsed_time:.2f} s\n"
             f"Convergence time: {elapsed:.2f} s\n"
             "========================================"
         )
@@ -311,6 +455,10 @@ class AcceptanceTestNode(Node):
             "========================================\n"
             f"Reason: {reason}"
             f"{detail}\n"
+            f"Discovery time: "
+            f"{self.discovery_elapsed_time:.2f} s\n"
+            f"Convergence time: "
+            f"{self.convergence_elapsed():.2f} s\n"
             "========================================"
         )
         self.finish(1)
@@ -322,18 +470,7 @@ class AcceptanceTestNode(Node):
         self.finished = True
         self.exit_code = exit_code
 
-        shutdown_thread = threading.Thread(
-            target=self.force_process_exit,
-            args=(exit_code,),
-            daemon=True,
-        )
-        shutdown_thread.start()
-
-    @staticmethod
-    def force_process_exit(exit_code: int) -> None:
-        # Allow the PASS/FAIL log to be flushed first.
-        time.sleep(0.2)
-        os._exit(exit_code)
+        self.timer.cancel()
 
     @staticmethod
     def yaw_from_quaternion(
@@ -356,19 +493,34 @@ class AcceptanceTestNode(Node):
 
 def main(args=None) -> int:
     rclpy.init(args=args)
-    node = AcceptanceTestNode()
+    node: Optional[AcceptanceTestNode] = None
+    exit_code = 2
 
     try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        node.exit_code = 130
+        node = AcceptanceTestNode()
+
+        while rclpy.ok() and not node.finished:
+            rclpy.spin_once(node, timeout_sec=0.1)
+
+        exit_code = node.exit_code
+    except (
+        KeyboardInterrupt,
+        ExternalShutdownException,
+    ):
+        exit_code = 130
+    except Exception:
+        if rclpy.ok():
+            raise
+
+        exit_code = 130
     finally:
-        node.destroy_node()
+        if node is not None:
+            node.destroy_node()
 
         if rclpy.ok():
             rclpy.shutdown()
 
-    return node.exit_code
+    return exit_code
 
 
 if __name__ == "__main__":
