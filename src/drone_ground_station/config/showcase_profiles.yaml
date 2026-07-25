@@ -1,0 +1,25 @@
+profiles:
+  default:
+    label: 默认复杂地图
+    map_file: static_map.yaml
+    target: [5.0, 0.0, 1.5]
+  single:
+    label: 单障碍物
+    map_file: single_obstacle.yaml
+    target: [5.0, 0.0, 1.5]
+  narrow:
+    label: 窄通道
+    map_file: narrow_passage.yaml
+    target: [5.0, 0.0, 1.5]
+  open:
+    label: 开放空间
+    map_file: open_space.yaml
+    target: [4.0, 1.5, 1.5]
+  random_seed_42:
+    label: 固定种子随机地图
+    map_file: random_seed_42.yaml
+    target: [5.0, 0.0, 1.5]
+  no_path:
+    label: 无路径（负向测试）
+    map_file: no_path.yaml
+    target: [5.0, 0.0, 1.5]

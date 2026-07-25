@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ROS2 Quadrotor Web Ground Station</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">Q</span>
+      <div><b>QUADROTOR MISSION CONTROL</b><small>ROS2 Web Ground Station</small></div>
+    </div>
+    <div class="top-status">
+      <span id="rosBadge" class="badge neutral">ROS OFFLINE</span>
+      <span id="simBadge" class="badge neutral">SIM STOPPED</span>
+      <span id="plannerBadge" class="badge neutral">PLANNER IDLE</span>
+      <span id="patrolBadge" class="badge neutral">PATROL IDLE</span>
+      <span id="waypointBadge" class="badge neutral">WP --</span>
+    </div>
+    <button id="holdBtn" class="btn warning">紧急悬停</button>
+  </header>
+
+  <div id="duplicateWarning" class="warning-banner hidden">
+    DUPLICATE SIMULATION DETECTED：检测到多套 /drone/odom 或 RPM 发布者，已禁止任务下发。
+  </div>
+
+  <main class="dashboard">
+    <aside class="panel controls-panel">
+      <section>
+        <h2>仿真与地图</h2>
+        <label>地图场景<select id="mapSelect"></select></label>
+        <div class="button-grid two">
+          <button id="startSimBtn" class="btn primary">启动仿真</button>
+          <button id="stopSimBtn" class="btn danger">停止自启仿真</button>
+          <button id="openRvizBtn" class="btn secondary">打开 RViz</button>
+          <button id="closeRvizBtn" class="btn secondary">关闭 RViz</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>地图交互</h2>
+        <div class="interaction-switch">
+          <button id="goalModeBtn" class="active">目标飞行</button>
+          <button id="waypointModeBtn">添加巡航点</button>
+        </div>
+        <label>目标高度 z (m)
+          <div class="range-row"><input id="targetZ" type="range" min="0.2" max="3.5" value="1.5" step="0.05"><input id="targetZNumber" type="number" value="1.5" step="0.05"></div>
+        </label>
+        <div id="previewText" class="coordinate-box">目标飞行模式：单击预览，双击直接飞行</div>
+        <div class="button-grid three">
+          <button id="sendPreviewBtn" class="btn primary" disabled>发送目标</button>
+          <button id="addPreviewWaypointBtn" class="btn success" disabled>加入巡航</button>
+          <button id="returnHomeBtn" class="btn secondary">返航</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>巡航模式</h2>
+        <label>模式<select id="patrolMode"><option value="ONCE">单次</option><option value="LOOP">循环</option><option value="PING_PONG">往返</option><option value="LAPS">指定圈数</option><option value="TIMED">定时巡航</option></select></label>
+        <div class="form-grid">
+          <label>圈数<input id="patrolLaps" type="number" min="0" value="2"></label>
+          <label>持续时间(s)<input id="patrolDuration" type="number" min="1" value="60"></label>
+          <label>停留(s)<input id="dwellSec" type="number" min="0" step="0.1" value="0.5"></label>
+          <label>最终动作<select id="finalAction"><option value="HOLD">原地悬停</option><option value="RETURN_HOME">返航</option></select></label>
+        </div>
+        <p id="patrolHint" class="hint">切换到“添加巡航点”后，普通单击即可添加；Shift+单击始终可快速添加。</p>
+        <div class="button-grid three">
+          <button id="startPatrolBtn" class="btn primary">开始巡航</button>
+          <button id="pauseBtn" class="btn warning">暂停</button>
+          <button id="resumeBtn" class="btn success">继续</button>
+          <button id="skipBtn" class="btn secondary">跳过</button>
+          <button id="stopPatrolBtn" class="btn danger">停止</button>
+          <button id="clearBtn" class="btn danger ghost">清空</button>
+        </div>
+      </section>
+
+      <section class="waypoint-section">
+        <div class="section-title-row"><h2>巡航航点</h2><span id="waypointCount">0</span></div>
+        <div id="waypointList" class="waypoint-list"><div class="empty">尚未添加航点</div></div>
+      </section>
+    </aside>
+
+    <section class="center-column">
+      <div class="panel map-panel">
+        <div class="panel-heading">
+          <div><h2>交互式任务地图</h2><span>TOP VIEW 支持点击；ISOMETRIC VIEW 显示高度绕障</span></div>
+          <div class="segmented"><button data-view="top" class="active">TOP VIEW</button><button data-view="iso">ISOMETRIC</button><button id="resetViewBtn">重置视图</button></div>
+        </div>
+        <canvas id="mapCanvas"></canvas>
+        <div class="legend"><span class="raw"></span>原始障碍物 <span class="inflated"></span>膨胀区 <span class="planned"></span>规划路径 <span class="actual"></span>实际轨迹 <span class="vehicle"></span>无人机</div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="panel chart-card"><h3>位置 x / y / z</h3><canvas id="positionChart"></canvas></div>
+        <div class="panel chart-card"><h3>高度与位置误差</h3><canvas id="errorChart"></canvas></div>
+        <div class="panel chart-card"><h3>四电机 RPM</h3><canvas id="rpmChart"></canvas></div>
+        <div class="panel chart-card"><h3>最小净空与任务进度</h3><canvas id="progressChart"></canvas></div>
+      </div>
+    </section>
+
+    <aside class="panel metrics-panel">
+      <section><h2>飞行状态</h2><div class="metric-grid">
+        <div><span>X</span><b id="xValue">--</b></div><div><span>Y</span><b id="yValue">--</b></div><div><span>Z</span><b id="zValue">--</b></div>
+        <div><span>速度</span><b id="speedValue">--</b></div><div><span>Roll</span><b id="rollValue">--</b></div><div><span>Pitch</span><b id="pitchValue">--</b></div><div><span>Yaw</span><b id="yawValue">--</b></div>
+      </div></section>
+      <section><h2>电机 RPM</h2><div class="rpm-grid"><div>M1<b id="rpm1Value">--</b></div><div>M2<b id="rpm2Value">--</b></div><div>M3<b id="rpm3Value">--</b></div><div>M4<b id="rpm4Value">--</b></div></div></section>
+      <section><h2>规划指标</h2><dl class="metrics-list">
+        <dt>最小净空</dt><dd id="clearanceValue">--</dd><dt>规划时间</dt><dd id="planningTimeValue">--</dd><dt>展开节点</dt><dd id="expandedValue">--</dd><dt>规划路径</dt><dd id="plannedLengthValue">--</dd><dt>实际路径</dt><dd id="actualLengthValue">--</dd><dt>最终误差</dt><dd id="finalErrorValue">--</dd><dt>碰撞次数</dt><dd id="collisionValue">--</dd>
+      </dl></section>
+      <section><h2>巡航进度</h2><div class="progress-shell"><div id="progressFill"></div></div><div class="patrol-details"><span id="lapValue">Lap --</span><span id="patrolElapsed">0.0 s</span></div></section>
+      <section><h2>实验与导出</h2><div class="button-grid two"><button id="exportBtn" class="btn secondary">导出 CSV/JSON</button><button id="saveMapBtn" class="btn secondary">保存地图 PNG</button></div><div id="exportPath" class="small-output"></div></section>
+      <section class="log-section"><div class="section-title-row"><h2>事件日志</h2><button id="clearLogBtn" class="mini-btn">清空</button></div><div id="eventLog" class="event-log"></div></section>
+    </aside>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

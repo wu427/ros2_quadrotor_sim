@@ -2,12 +2,13 @@
 
 ## 1. 文档范围
 
-本文描述当前仓库中实际存在的架构，并将尚未实现的地图和规划能力单独标为“目标架构”。接口、默认参数和公式均以 `src/` 下的源码及 `vertical_sim.yaml` 为准。
+本文描述当前仓库中实际存在的核心仿真与静态规划架构。接口、默认参数和公式以 `src/` 下源码、`vertical_sim.yaml` 和 `drone_map/config/*.yaml` 为准；实测结论以当前日志和阶段证据为准。
 
 当前系统是一个进程级 ROS2 闭环仿真，不依赖 Gazebo：
 
 ```text
-目标位姿
+任务目标或直接控制目标
+  -> 可选静态地图与 3D A* 航点层
   -> 位置/姿态控制器
   -> 4 路电机 RPM 命令
   -> 6DoF 动力学
@@ -25,11 +26,13 @@
 | 电机 mixer | 已有实现 | 总推力/三轴力矩到 4 路 RPM |
 | Odom、IMU、TF、Path | 已有实现 | 由动力学节点发布 |
 | URDF、RViz、目标 Marker | 已有实现 | `drone_bringup` |
-| 单目标自动验收 | 已有实现 | 当前环境基线尚未通过 |
+| 单目标自动验收 | 已有实现 | `run_acceptance.sh` 当前复测 PASS |
 | 自定义消息 | 未实现 | `drone_msgs` 为空包 |
-| 静态地图 | 未实现 | `drone_map` 为空包 |
-| 路径规划/避障 | 未实现 | `drone_planner` 为空包 |
-| 地面站 | 未实现 | 当前采用 RViz |
+| 静态地图 | 已有实现 | 6 障碍默认场景、AABB 膨胀、双层 Marker 与可选点云 |
+| 路径规划/避障 | 已有实现 | 3D A*、LOS、安全平滑、重采样和前视执行 |
+| 任务管理 | 已有实现 | 单目标、多航点、暂停/继续/取消和预定义轨迹 |
+| 规划系统验收 | 已有实现 | 复杂/窄通道/随机/多段正向与负向场景 |
+| 地面站 | 已有实现 | PyQt5、后台 rclpy、二维图、曲线和导出 |
 
 ## 3. 包级架构
 
@@ -39,16 +42,19 @@ flowchart LR
     C["drone_controller<br/>位置与姿态控制"]
     D["drone_dynamics<br/>电机与 6DoF 刚体动力学"]
     M["drone_msgs<br/>空骨架"]
-    MAP["drone_map<br/>空骨架"]
-    P["drone_planner<br/>空骨架"]
+    MAP["drone_map<br/>YAML / AABB / 碰撞几何 / Marker"]
+    P["drone_planner<br/>3D A* / LOS 简化 / 航点执行"]
+    GS["drone_ground_station<br/>Qt / ROS bridge / plots / export"]
 
     B --> C
     B --> D
-    B -. "未来启用" .-> MAP
-    B -. "未来启用" .-> P
+    B --> MAP
+    B --> P
+    B --> GS
     M -. "当前未被引用" .-> C
-    MAP -. "未来地图输入" .-> P
-    P -. "未来安全参考" .-> C
+    MAP --> P
+    P --> C
+    GS --> P
 ```
 
 ### 3.1 `drone_dynamics`
@@ -92,14 +98,47 @@ flowchart LR
 - 提供四旋翼 URDF 与 RViz 配置；
 - 将目标位姿转换为持续显示的 Marker；
 - 提供单目标自动验收节点和 launch。
+- 提供规划仿真、规划验收 launch、独立 RViz 与场景 wrapper。
 
-### 3.4 预留包
+### 3.4 `drone_map`
 
-- `drone_msgs`：没有 `.msg/.srv/.action` 定义。
-- `drone_map`：没有节点或地图数据。
-- `drone_planner`：没有节点或规划算法。
+职责：
 
-在实现前，文档和界面不得把这些包描述为已完成功能。
+- 从固定 YAML 加载地图边界、无人机半径、安全余量、栅格分辨率和 AABB；
+- 验证有限值、正尺寸、边界关系、唯一 ID 和障碍物范围；
+- 提供与 ROS 解耦的点/线段/折线路径碰撞、膨胀和连续净空计算；
+- 以 Reliable、Transient Local QoS 发布 `/map/obstacles`。
+- 发布可独立开关的 `/map/inflated_obstacles`；
+- 可选按固定 spacing 发布 `/map/obstacle_points`，点云只用于显示。
+
+### 3.5 `drone_planner`
+
+职责：
+
+- 在膨胀 AABB 上执行有扩展数与时间上限的 26 邻域 3D A*；
+- 使用连续线段碰撞检查防止对角穿角；
+- 用最远可视后继策略简化栅格路径，并再次验证每段；
+- 使用 Chaikin 候选、精确线段检查和不超过 `0.05 m` 的致密复检；
+- 保留关键拐点并按弧长重采样，以 20 Hz 前视参考更新 `/drone/goal`；
+- 先垂直起飞，普通路径点满足 `minimum_flight_z`；
+- 管理单目标、多航点、暂停、继续、取消、最终 yaw 和稳定完成。
+
+### 3.6 `drone_ground_station`
+
+职责：
+
+- 在 Qt 主线程创建和更新全部 QWidget；
+- 在后台 QThread 中独占 rclpy Node 与 executor；
+- 订阅 Odom、IMU、RPM、Path、地图和规划/任务 JSON；
+- 发布单目标、多航点和任务命令；
+- 使用 QProcess 与独立进程组启动/停止自身仿真；
+- 导出 CSV、PNG、JSON 和截图。
+
+当前只支持一架无人机，Qt 二维视图不替代 RViz。
+
+### 3.7 预留包
+
+`drone_msgs` 仍没有 `.msg/.srv/.action` 定义。地图与规划继续复用标准消息。
 
 ## 4. 运行时节点与进程
 
@@ -111,57 +150,71 @@ flowchart LR
 | `goal_marker_node` | `drone_bringup` | Python | Marker 重发 5 Hz | RViz 目标球 |
 | `rviz2` | 外部 ROS2 包 | C++ | 画面 30 FPS | 可视化 |
 | `acceptance_test_node` | `drone_bringup` | Python | 10 Hz | 发目标并判定收敛 |
+| `static_map_node` | `drone_map` | Python | 静态一次发布 | 地图 MarkerArray |
+| `planner_node` | `drone_planner` | Python | 事件驱动 | 3D A*、简化和航点执行 |
+| `mission_manager_node` | `drone_planner` | Python | 事件驱动 | 多航点顺序任务 |
+| `planning_acceptance_node` | `drone_bringup` | Python | 10 Hz | 规划路径与实际轨迹联合验收 |
+| `showcase_acceptance_node` | `drone_bringup` | Python | 10 Hz | 展示正负向自动验收 |
+| `ground_station_bridge` | `drone_ground_station` | Python | 后台线程 | Qt 与 ROS2 数据桥 |
 
-`acceptance_test_node` 只在 `acceptance_test.launch.py` 中启动；RViz 和目标 Marker 不在自动验收 launch 中启动。
+`acceptance_test_node` 只在基础验收启动。`planning_acceptance_node` 只在规划验收启动；它结束时触发整个 launch 清理。
 
 ## 5. 当前闭环数据流
 
 ```mermaid
 flowchart LR
-    U["用户或验收节点"]
-    G["/drone/goal<br/>PoseStamped"]
+    U["用户/规划验收"]
+    MG["/drone/mission_goal"]
+    MAP["static_map_node<br/>共享 YAML + AABB"]
+    PLAN["planner_node<br/>A* + LOS + 平滑 + 前视"]
+    MM["mission_manager_node<br/>多段任务"]
+    PP["/drone/planned_path"]
+    G["/drone/goal"]
     C["position_controller_node"]
-    CMD["/drone/motor_rpm_cmd<br/>Float32MultiArray[4]"]
+    CMD["/drone/motor_rpm_cmd"]
     D["quadrotor_dynamics_node"]
-    O["/drone/odom<br/>Odometry"]
-    I["/drone/imu<br/>Imu"]
-    R["/drone/motor_rpm<br/>Float32MultiArray[4]"]
-    P["/drone/path<br/>Path"]
-    TF["/tf<br/>map -> base_link"]
-    DP["/drone/desired_pose<br/>PoseStamped"]
-    GM["goal_marker_node"]
-    MK["/drone/goal_marker<br/>Marker"]
+    O["/drone/odom"]
+    ACT["/drone/path"]
     V["RViz2"]
-    A["acceptance_test_node"]
 
-    U --> G
-    A --> G
-    G --> C
-    G --> GM
-    GM --> MK
-    C --> CMD
-    CMD --> D
+    U --> MG --> PLAN
+    U --> MM --> MG
+    MAP --> PLAN
+    MAP --> V
+    PLAN --> PP --> V
+    PLAN --> G --> C
+    C --> CMD --> D
     D --> O
     O --> C
-    O --> A
-    D --> I
-    D --> R
-    D --> P
-    D --> TF
-    C --> DP
-    MK --> V
-    P --> V
-    TF --> V
-    DP --> V
+    O --> PLAN
+    D --> ACT --> V
 ```
+
+普通 `sim.launch.py` 仍允许用户直接发布 `/drone/goal`，用于不启用规划器的基础闭环。规划模式下用户只向 `/drone/mission_goal` 发最终任务目标，规划器独占安全航点生成。
 
 ## 6. ROS2 接口契约
 
-所有当前自建 publisher/subscriber 都使用 depth 10 的默认 QoS，即 Reliable、Volatile、Keep Last。
+高频控制与状态接口使用 depth 10 的 Reliable、Volatile、Keep Last。静态地图、规划路径、规划状态和规划 Marker 使用 depth 1 的 Reliable、Transient Local QoS，使晚启动 RViz/验收订阅者能获得最新样本。
 
 | Topic | 消息类型 | Publisher | Subscriber | 语义/单位 | 预期频率 |
 |---|---|---|---|---|---:|
-| `/drone/goal` | `geometry_msgs/msg/PoseStamped` | 用户或验收节点 | 控制器、目标 Marker | `map` 系目标位置 m；四元数偏航 | 事件驱动 |
+| `/drone/mission_goal` | `geometry_msgs/msg/PoseStamped` | 用户或规划验收 | 规划器 | `map` 系最终任务目标 | 事件驱动 |
+| `/drone/goal` | `geometry_msgs/msg/PoseStamped` | 用户/基础验收或规划器 | 控制器、目标 Marker | 当前控制目标或安全航点 | 事件驱动 |
+| `/map/obstacles` | `visualization_msgs/msg/MarkerArray` | 静态地图 | RViz | 原始 AABB 和地图边界；仅用于显示 | 静态 |
+| `/map/inflated_obstacles` | `visualization_msgs/msg/MarkerArray` | 静态地图 | RViz | 真实膨胀安全区 | 静态 |
+| `/map/obstacle_points` | `sensor_msgs/msg/PointCloud2` | 静态地图 | RViz | 可选表面显示点云 | 静态 |
+| `/drone/mission_waypoints` | `nav_msgs/msg/Path` | 用户/Qt | 任务管理器 | 多段任务目标 | 事件驱动 |
+| `/drone/mission_command` | `std_msgs/msg/String` | 用户/Qt | 任务管理器、规划器 | START/PAUSE/RESUME/CANCEL/CLEAR | 事件驱动 |
+| `/drone/mission_status` | `std_msgs/msg/String` | 任务管理器 | Qt/验收 | 任务 JSON | 状态变化 |
+| `/drone/mission_progress` | `std_msgs/msg/Float32` | 任务管理器 | Qt/记录器 | `[0,1]` | 状态变化 |
+| `/drone/planned_path` | `nav_msgs/msg/Path` | 规划器 | RViz、规划验收 | 重采样后的安全执行路径 | 每次成功规划 |
+| `/drone/current_waypoint` | `visualization_msgs/msg/Marker` | 规划器 | RViz | 当前控制航点 | 航点切换 |
+| `/drone/mission_goal_marker` | `visualization_msgs/msg/Marker` | 规划器 | RViz | 最终任务目标 | 每次新任务 |
+| `/drone/planner_status` | `std_msgs/msg/String` | 规划器 | 规划验收/观察者 | JSON；状态与规划指标 | 状态变化 |
+| `/drone/planning_metrics` | `std_msgs/msg/String` | 规划器 | Qt/记录器 | 规划指标 JSON | 指标变化 |
+| `/drone/avoidance_active` | `std_msgs/msg/Bool` | 规划器 | Qt/记录器 | 直线路径是否受阻 | 每次规划 |
+| `/drone/min_obstacle_clearance` | `std_msgs/msg/Float32` | 规划器 | Qt/记录器 | 规划路径净空，m | 每次规划 |
+| `/drone/current_waypoint_index` | `std_msgs/msg/Int32` | 规划器 | Qt/记录器 | 当前前视参考索引 | 进度变化 |
 | `/drone/motor_rpm_cmd` | `std_msgs/msg/Float32MultiArray` | 控制器 | 动力学 | `[M1,M2,M3,M4]`，单位 RPM | 100 Hz |
 | `/drone/motor_rpm` | `std_msgs/msg/Float32MultiArray` | 动力学 | 外部观察者 | 实际电机 RPM | 约 50 Hz |
 | `/drone/odom` | `nav_msgs/msg/Odometry` | 动力学 | 控制器、验收节点 | 世界系位置/速度，机体系角速度 | 约 50 Hz |
@@ -373,54 +426,52 @@ ros2 launch drone_bringup acceptance_test.launch.py
 - 线速度不大于 `0.05 m/s`；
 - 角速度不大于 `0.05 rad/s`；
 - 连续稳定至少 `1 s`；
-- 总超时 `15 s`。
+- discovery 最多 `15 s`，发目标后收敛最多 `20 s`。
 
-其中 launch 当前只暴露位置、偏航和超时阈值；速度阈值和稳定时间只能使用节点默认值。
+这些阈值均由基础验收 launch 参数显式传入。
+
+### 12.5 规划可视化
+
+```bash
+ros2 launch drone_bringup planned_sim.launch.py
+```
+
+该入口 include 普通 `sim.launch.py rviz:=false`，再启动静态地图、规划器和规划专用 RViz。`map_file` 与 `rviz_config` 均可覆盖；`rviz:=false` 可用于无界面运行。
+
+### 12.6 规划自动验收
+
+```bash
+./scripts/run_planning_acceptance.sh scenario:=single
+./scripts/run_planning_acceptance.sh scenario:=multi
+./scripts/run_planning_acceptance.sh scenario:=invalid_goal
+./scripts/run_planning_acceptance.sh scenario:=no_path
+```
+
+正向场景必须同时满足规划折线无膨胀碰撞、实际 odometry 轨迹无原始 AABB 碰撞、实际净空不小于无人机半径并稳定到达。两个负向场景必须输出 `PLANNING ACCEPTANCE: FAIL` 且 wrapper 返回非零。
 
 ## 13. 当前已知架构风险
 
-1. 当前环境中的系统闭环验收没有复现历史 PASS，需先检查 DDS/RMW、topic 连接和定时器。
-2. 自动验收子进程失败时，外层 launch 命令可能仍返回 0，CI 可能误判。
-3. 动力学和控制器缺少行为级单元测试。
-4. C++ 动力学包没有显式声明 C++17，但使用了 `std::clamp`。
-5. 多个包仍包含 `TODO` 元数据和 `0.0.0` 版本。
-6. 共享物理参数在两个节点中重复，配置漂移会破坏闭环。
-7. `Float32MultiArray` 不携带电机顺序、单位和时间戳，接口自描述性较弱。
-8. IMU 没有协方差、噪声和偏置，不能等同于真实传感器。
-9. 轨迹最多 5000 点但不可配置，约 10 Hz 时保存约 500 秒。
-10. 独立电机饱和会改变 mixer 输出的力/力矩比例。
-11. `core_sim.launch.py` 与 `vertical_hover.launch.py` 重复。
-12. 地图、规划和自定义消息只是骨架，不应进入“已完成功能”清单。
+1. ROS2 launch 的外层退出码不能单独代表验收结果，必须由 repository wrapper 解析显式 PASS/FAIL 和节点异常。
+2. 动力学和控制器仍缺少可脱离 ROS graph 的行为级单元测试。
+3. 共享物理参数在动力学和控制器中重复，配置漂移会破坏闭环。
+4. `Float32MultiArray` 不携带电机顺序、单位和时间戳，接口自描述性较弱。
+5. IMU 没有协方差、噪声和偏置，不能等同于真实传感器。
+6. 独立电机饱和会改变 mixer 输出的力/力矩比例。
+7. 当前 A* 是静态全局规划，不支持动态障碍、运行中地图更新或持续重规划。
+8. AABB 表示只支持轴对齐盒；Marker 不是规划输入，二者由同一 YAML 生成但职责不同。
+9. 航点切换采用距离阈值，控制器会产生与规划折线不同的连续轨迹，因此验收必须独立检查实际 odometry 净空。
+10. 搜索分辨率固定来自单一地图 YAML；更细分辨率会显著增加内存与扩展数。
+11. `core_sim.launch.py` 与 `vertical_hover.launch.py` 功能重叠。
+12. `drone_msgs` 仍是空骨架，不能描述为已实现自定义接口。
 
-## 14. 目标扩展架构
+## 14. 已实现规划边界
 
-仅在必做闭环和测试稳定后扩展：
-
-```mermaid
-flowchart LR
-    USER["用户目标<br/>/drone/goal"]
-    MAP["obstacle_map_node<br/>/map/obstacles"]
-    PLAN["local_planner_node"]
-    REF["/drone/safe_goal<br/>或 /drone/reference"]
-    CTRL["position_controller_node"]
-    DYN["quadrotor_dynamics_node"]
-    STATE["/drone/odom"]
-    PATH["/drone/planned_path"]
-    RVIZ["RViz2"]
-
-    USER --> PLAN
-    MAP --> PLAN
-    STATE --> PLAN
-    PLAN --> REF
-    REF --> CTRL
-    CTRL --> DYN
-    DYN --> STATE
-    MAP --> RVIZ
-    PATH --> RVIZ
-    PLAN --> PATH
-```
-
-扩展时必须把“用户最终目标”和“控制器当前安全参考”分成不同 topic，避免规划器输出重新进入自身输入形成回环。
+- 地图固定在启动时加载，运行期间不接受更新。
+- 用户任务目标固定为 `/drone/mission_goal`；规划器输出 `/drone/goal`，避免反馈回环。
+- 新任务会取消旧航点并从最新有效 odometry 重新规划。
+- 规划失败不会向控制器发布任务最终目标。
+- 当前只实现 3D 栅格 A* 与折线 LOS 简化，不包含 B 样条、RRT、SLAM、OctoMap 或动态避障。
+- 碰撞规划使用膨胀 AABB；实际轨迹验收使用原始 AABB 并另行检查无人机半径净空。
 
 ## 15. 架构变更准则
 

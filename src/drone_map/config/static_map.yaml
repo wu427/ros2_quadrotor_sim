@@ -1,0 +1,54 @@
+map:
+  frame_id: map
+  x_min: -1.0
+  x_max: 6.0
+  y_min: -4.0
+  y_max: 4.0
+  z_min: 0.0
+  z_max: 3.5
+  drone_radius: 0.25
+  safety_margin: 0.05
+  grid_resolution: 0.25
+  obstacles:
+    - id: central_block
+      center_x: 2.2
+      center_y: 0.0
+      center_z: 1.05
+      size_x: 0.9
+      size_y: 1.2
+      size_z: 2.1
+    - id: north_corridor_wall
+      center_x: 2.225
+      center_y: 2.825
+      center_z: 1.325
+      size_x: 1.75
+      size_y: 0.75
+      size_z: 2.65
+    - id: south_corridor_wall
+      center_x: 2.225
+      center_y: -2.70
+      center_z: 1.325
+      size_x: 1.75
+      size_y: 1.0
+      size_z: 2.65
+    - id: north_rear_block
+      center_x: 3.75
+      center_y: 1.10
+      center_z: 1.175
+      size_x: 0.8
+      size_y: 0.8
+      size_z: 2.35
+    - id: south_rear_block
+      center_x: 3.75
+      center_y: -1.30
+      center_z: 1.175
+      size_x: 0.8
+      size_y: 0.8
+      size_z: 2.35
+    - id: far_corner_pillar
+      center_x: 4.975
+      center_y: 2.775
+      center_z: 1.40
+      size_x: 0.65
+      size_y: 0.65
+      size_z: 2.80

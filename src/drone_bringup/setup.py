@@ -74,6 +74,18 @@ setup(
                 "acceptance_test_node = "
                 "drone_bringup.acceptance_test_node:main"
             ),
+            (
+                "planning_acceptance_node = "
+                "drone_bringup.planning_acceptance_node:main"
+            ),
+            (
+                "showcase_acceptance_node = "
+                "drone_bringup.showcase_acceptance_node:main"
+            ),
+            (
+                "rviz_goal_bridge_node = "
+                "drone_bringup.rviz_goal_bridge_node:main"
+            ),
         ],
     },
 )
