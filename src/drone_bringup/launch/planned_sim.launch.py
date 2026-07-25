@@ -129,6 +129,23 @@ def generate_launch_description() -> LaunchDescription:
         name="mission_manager_node",
         output="screen",
     )
+    rviz_goal_bridge = Node(
+        package="drone_bringup",
+        executable="rviz_goal_bridge_node",
+        name="rviz_goal_bridge_node",
+        output="screen",
+        parameters=[{
+            "target_altitude": _float_parameter(
+                "rviz_target_altitude"
+            ),
+            "minimum_altitude": _float_parameter(
+                "minimum_flight_z"
+            ),
+            "maximum_altitude": _float_parameter(
+                "rviz_maximum_altitude"
+            ),
+        }],
+    )
     rviz = Node(
         package="rviz2",
         executable="rviz2",
@@ -165,6 +182,16 @@ def generate_launch_description() -> LaunchDescription:
                 bringup_share / "rviz" / "planned_quadrotor.rviz"
             ),
             description="RViz2 configuration for planned simulation.",
+        ),
+        DeclareLaunchArgument(
+            "rviz_target_altitude",
+            default_value="1.50",
+            description="Altitude used by RViz 2D Goal Pose.",
+        ),
+        DeclareLaunchArgument(
+            "rviz_maximum_altitude",
+            default_value="3.50",
+            description="Maximum accepted RViz target altitude.",
         ),
         DeclareLaunchArgument(
             "waypoint_pass_radius",
@@ -260,5 +287,6 @@ def generate_launch_description() -> LaunchDescription:
         static_map,
         planner,
         mission_manager,
+        rviz_goal_bridge,
         rviz,
     ])

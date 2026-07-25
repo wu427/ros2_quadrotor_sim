@@ -7,6 +7,7 @@ import math
 from queue import Empty
 from queue import Queue
 import time
+import threading
 from typing import Dict, Sequence
 
 from geometry_msgs.msg import PoseStamped
@@ -43,6 +44,13 @@ class RosWorker(QThread):
     def __init__(self) -> None:
         super().__init__()
         self._commands: Queue[tuple[str, object]] = Queue()
+        self._graph_lock = threading.Lock()
+        self._simulation_publishers = 0
+
+    def simulation_publishers(self) -> int:
+        """Return the latest observed /drone/odom publisher count."""
+        with self._graph_lock:
+            return self._simulation_publishers
 
     def enqueue(self, command: str, payload: object = None) -> None:
         """Queue a ROS publication for the worker thread."""
@@ -65,9 +73,17 @@ class RosWorker(QThread):
             executor.add_node(node)
             context = self._create_entities(node)
             self.connection.emit("CONNECTED")
+            next_graph_check = 0.0
             while not self.isInterruptionRequested() and rclpy.ok():
                 executor.spin_once(timeout_sec=0.05)
                 self._drain_commands(node, context)
+                now = time.monotonic()
+                if now >= next_graph_check:
+                    with self._graph_lock:
+                        self._simulation_publishers = node.count_publishers(
+                            "/drone/odom"
+                        )
+                    next_graph_check = now + 1.0
         except Exception as error:  # GUI boundary must report cleanly.
             self.log.emit(f"ROS 线程异常：{error}\n")
             self.connection.emit("ERROR")

@@ -356,7 +356,7 @@ class PlannerNode(Node):
                 )
             elif self._path:
                 self._publish_control_goal()
-        elif command == "CANCEL" and self._state not in {
+        elif command in {"CANCEL", "STOP"} and self._state not in {
             "IDLE",
             "COMPLETED",
             "CANCELLED",
@@ -372,7 +372,12 @@ class PlannerNode(Node):
             self._path = ()
             self._mission_position = None
             self._set_state("IDLE", "operator_clear")
-        elif command not in {"START", "PAUSE", "RESUME", "CANCEL", "CLEAR"}:
+        elif command in {"SKIP", "RETURN_HOME"}:
+            # The mission manager consumes these high-level patrol commands.
+            return
+        elif command not in {
+            "START", "PAUSE", "RESUME", "CANCEL", "STOP", "CLEAR"
+        }:
             self.get_logger().warning(
                 f"Ignoring unsupported mission command '{command}'"
             )

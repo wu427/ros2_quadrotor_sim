@@ -19,3 +19,4 @@ __pycache__/
 *.fdb_latexmk
 *.fls
 *.synctex.gz
+output/web_runs/

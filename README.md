@@ -17,6 +17,7 @@
 | hover/point/square/circle/figure-eight | 已实现 | `trajectories.py` |
 | RViz 原始/膨胀障碍物与可选点云 | 已实现 | `planned_quadrotor.rviz` |
 | PyQt5 地面站、曲线与数据导出 | 已实现 | `drone_ground_station` |
+| 单页 Web、点击飞行与循环巡航 | 已实现 | `drone_web_ground_station` |
 | 动态障碍物、SLAM、多机、Gazebo | 未实现 | 不在当前范围 |
 
 ## ROS2 package
@@ -29,6 +30,7 @@
 | `drone_map` | YAML 地图、AABB、膨胀、净空、Marker/PointCloud2 |
 | `drone_planner` | 3D A*、LOS、平滑、前视执行、任务管理与轨迹生成 |
 | `drone_ground_station` | PyQt5 监控、任务控制、曲线与导出 |
+| `drone_web_ground_station` | 单页 Web、点击目标、巡航、SSE 与完整任务记录 |
 | `drone_msgs` | 预留空包；当前继续使用 ROS2 标准消息 |
 
 ## 地图与安全模型
@@ -88,7 +90,9 @@ COMPLETED / FAILED / PAUSED / CANCELLED`。`PAUSE` 保持当前位置，
 |---|---|---|
 | `/drone/mission_goal` | `geometry_msgs/PoseStamped` | 单个安全规划目标 |
 | `/drone/mission_waypoints` | `nav_msgs/Path` | 多航点任务 |
-| `/drone/mission_command` | `std_msgs/String` | START/PAUSE/RESUME/CANCEL/CLEAR |
+| `/drone/mission_command` | `std_msgs/String` | START/PAUSE/RESUME/SKIP/STOP/RETURN_HOME/CLEAR |
+| `/drone/patrol_config` | `std_msgs/String` | 巡航模式、圈数、时长、停留与最终动作 JSON |
+| `/drone/patrol_status` | `std_msgs/String` | 巡航状态、圈数、航点和进度 JSON |
 | `/drone/goal` | `geometry_msgs/PoseStamped` | 控制器当前参考 |
 | `/drone/planned_path` | `nav_msgs/Path` | 执行路径 |
 | `/drone/path` | `nav_msgs/Path` | 实际轨迹 |
@@ -140,10 +144,16 @@ ros2 launch drone_bringup sim.launch.py
 ros2 launch drone_bringup planned_sim.launch.py
 ```
 
-Qt + 可选 RViz 一键展示：
+推荐单页 Web 展示：
 
 ```bash
-ros2 launch drone_bringup showcase.launch.py gui:=true rviz:=true
+ros2 launch drone_bringup showcase.launch.py ui:=web rviz:=false
+```
+
+Qt + 可选 RViz：
+
+```bash
+ros2 launch drone_bringup showcase.launch.py ui:=qt rviz:=true
 ```
 
 独立地面站：
@@ -210,7 +220,7 @@ GUI 支持地图选择、自定义 YAML、规划参数校验、JSON profile、�
 
 ## 仓库与交付位置
 
-- `src/`：七个 ROS2 package；
+- `src/`：八个 ROS2 package；
 - `scripts/`：可重复运行和实验命令；
 - `docs/`：架构、阶段计划、写作规范与证据索引；
 - `output/`：后续最终报告、PDF 或实验导出；
@@ -228,3 +238,48 @@ GUI 支持地图选择、自定义 YAML、规划参数校验、JSON profile、�
 - 单机 Topic 固定为 `/drone/*`，未实现真正 namespace 多机隔离；
 - Qt 二维图用于操作与观察，不能替代 RViz 三维语义；
 - 随机地图生成器需要调用项目 A* validator，失败会明确抛错。
+
+## 单页 Web 地面站与巡航模式
+
+新增 `drone_web_ground_station` 包，使用 Python 标准库 HTTP Server、SSE、
+原生 HTML/CSS/JavaScript 和 Canvas 2D，不依赖 Flask、Node.js、CDN 或
+rosbridge。推荐最终展示命令：
+
+```bash
+ros2 launch drone_bringup showcase.launch.py \
+  ui:=web rviz:=false
+```
+
+浏览器访问 `http://127.0.0.1:8765`。旧命令仍兼容：`ui:=qt` 使用 Qt，
+`ui:=none` 只启动 ROS 仿真，`ui:=auto gui:=true` 保持此前行为。
+
+Web 页面将任务控制、交互地图、飞行状态、规划指标、四组实时曲线和日志集中
+在一个页面。TOP VIEW 中：
+
+- 单击预览目标；
+- 双击合法目标，通过 `/drone/mission_goal` 交给现有 3D A*；
+- `Shift+单击` 依次添加巡航航点；
+- 拖动航点修改 x/y；
+- 右键删除最近航点；
+- 滚轮缩放，`Alt+拖动` 或中键拖动平移；
+- ISOMETRIC VIEW 用等轴测方式显示高度绕障。
+
+巡航支持 `ONCE`、`LOOP`、`PING_PONG`、`LAPS` 和 `TIMED`，以及暂停、
+继续、跳过、停止、返航、航点停留和最终返航。每两个航点之间仍调用现有
+3D A*，不会绕开安全规划器。
+
+Web 与 Qt 在启动仿真前都会检测 `/drone/odom` 发布者。检测到外部仿真时
+拒绝重复启动；发现发布者数量大于 1 时，Web 页面显示红色警告并禁止下发
+任务，但不会自动杀死任何进程。
+
+每个任务开始时建立独立记录，任务完成、失败或停止后冻结，不再被后续悬停
+数据覆盖。导出目录为 `output/web_runs/<timestamp>_<task>/`，包含：
+
+- `telemetry.csv`；
+- `mission_summary.json`；
+- `waypoints.csv`；
+- `events.jsonl`。
+
+单点任务的顶层完成状态以 planner 为准；巡航任务以 patrol manager 为准，
+各模块原始状态保留在摘要中，避免出现 planner `COMPLETED` 与未加载多航点
+mission manager `FAILED` 被误判为同一任务结论。
